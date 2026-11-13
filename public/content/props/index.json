@@ -1,0 +1,36 @@
+{
+  "note": "Reusable scenery objects. Entries under \"props\" are loaded; \"disabled\" ones are kept for reference only (the Meshy-generated set was switched off on request - the game uses its built-in shapes). height = real height in metres, detail = texture pixels kept.",
+  "props": {},
+  "disabled": {
+    "pine": {
+      "height": 9
+    },
+    "rock": {
+      "height": 1.3
+    },
+    "streetlight": {
+      "height": 9,
+      "yaw": 0
+    },
+    "utility-pole": {
+      "height": 10.5
+    },
+    "gas-canopy": {
+      "height": 5.6,
+      "yaw": 0,
+      "detail": 160
+    },
+    "store": {
+      "height": 4.4,
+      "yaw": 0,
+      "detail": 160
+    },
+    "barrier": {
+      "height": 0.81
+    },
+    "cone": {
+      "height": 0.72,
+      "detail": 96
+    }
+  }
+}

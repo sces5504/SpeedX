@@ -1,0 +1,11 @@
+node_modules
+dist
+tools/.cache
+.DS_Store
+
+/reference/
+/previews/
+/tools/meshy-jobs/
+/.claude/
+.env
+.env.*

@@ -1,0 +1,91 @@
+{
+  "engine_idle": {
+    "file": "engine_idle.wav",
+    "rpm": 850
+  },
+  "engine_low": {
+    "file": "engine_low.wav",
+    "rpm": 2400
+  },
+  "engine_mid": {
+    "file": "engine_mid.wav",
+    "rpm": 5160
+  },
+  "engine_high": {
+    "file": "engine_high.wav",
+    "rpm": 6420
+  },
+  "race_low": {
+    "file": "race_low.wav",
+    "rpm": 2100
+  },
+  "pop1": {
+    "file": "pop1.wav"
+  },
+  "pop2": {
+    "file": "pop2.wav"
+  },
+  "pop3": {
+    "file": "pop3.wav"
+  },
+  "pop4": {
+    "file": "pop4.wav"
+  },
+  "pop5": {
+    "file": "pop5.wav"
+  },
+  "blowoff1": {
+    "file": "blowoff1.wav"
+  },
+  "blowoff2": {
+    "file": "blowoff2.wav"
+  },
+  "supercharger": {
+    "file": "supercharger.wav",
+    "rpm": 6000
+  },
+  "rain_cabin": {
+    "file": "rain_cabin.wav"
+  },
+  "rain_wipers": {
+    "file": "rain_wipers.wav"
+  },
+  "road_wet": {
+    "file": "road_wet.wav"
+  },
+  "pass_highway": {
+    "file": "pass_highway.wav",
+    "peak": 1.6
+  },
+  "pass_fast": {
+    "file": "pass_fast.wav",
+    "peak": 1.4
+  },
+  "pass_cabin": {
+    "file": "pass_cabin.wav",
+    "peak": 1.4
+  },
+  "pass_wet": {
+    "file": "pass_wet.wav",
+    "peak": 1.4
+  },
+  "pass_race": {
+    "file": "pass_race.wav",
+    "peak": 1.8
+  },
+  "impact": {
+    "file": "impact.wav"
+  },
+  "crash": {
+    "file": "crash.wav"
+  },
+  "shift": {
+    "file": "shift.wav"
+  },
+  "rev": {
+    "file": "rev.wav"
+  },
+  "race_start": {
+    "file": "race_start.wav"
+  }
+}

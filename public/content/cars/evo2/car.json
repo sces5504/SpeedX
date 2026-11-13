@@ -1,0 +1,63 @@
+{
+  "id": "evo2",
+  "role": "hero",
+  "name": "Mercedes-Benz 190 E 2.5-16 Evolution II",
+  "year": 1990,
+  "length": 4.43,
+  "width": 1.72,
+  "height": 1.342,
+  "wheelbase": 2.665,
+  "frontOverhang": 0.8,
+  "wheelRadius": 0.315,
+  "clearance": 0.14,
+  "tumble": 0.82,
+  "colors": ["#1b2230", "#14161a", "#8c9096"],
+  "stations": [
+    [0, 0.55, 0, 0.93],
+    [0.015, 0.7, 0, 0.97],
+    [0.06, 0.78, 0, 1],
+    [0.3, 0.9, 0, 1, "ws"],
+    [0.42, 0.93, 1.33, 1, "cab"],
+    [0.7, 0.95, 1.342, 1, "rw"],
+    [0.8, 0.98, 1.02, 1],
+    [0.985, 0.97, 0, 0.99],
+    [1, 0.85, 0, 0.95]
+  ],
+  "headlights": {
+    "x": 0.62,
+    "y": 0.68,
+    "w": 0.36,
+    "h": 0.15
+  },
+  "taillights": {
+    "x": 0.6,
+    "y": 0.84,
+    "w": 0.5,
+    "h": 0.15
+  },
+  "driverSide": -1,
+  "gaugeColor": "#ffd9a0",
+  "spoiler": 1.24,
+  "grille": true,
+  "mass": 1340,
+  "frontWeight": 0.54,
+  "cgHeight": 0.5,
+  "dragArea": 0.58,
+  "engine": {
+    "idle": 900,
+    "redline": 7700,
+    "torque": [
+      [1000, 150],
+      [3000, 205],
+      [5000, 245],
+      [6500, 240],
+      [7200, 229],
+      [7700, 200]
+    ]
+  },
+  "gears": [4.08, 2.52, 1.77, 1.26, 1],
+  "finalDrive": 3.27,
+  "sound": "race4",
+  "grip": 1.04,
+  "brakeG": 1.05
+}

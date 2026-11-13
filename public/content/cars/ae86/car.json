@@ -1,0 +1,62 @@
+{
+  "id": "ae86",
+  "role": "hero",
+  "name": "Toyota Sprinter Trueno GT-APEX (AE86)",
+  "year": 1985,
+  "length": 4.205,
+  "width": 1.625,
+  "height": 1.335,
+  "wheelbase": 2.4,
+  "frontOverhang": 0.8,
+  "wheelRadius": 0.29,
+  "clearance": 0.16,
+  "tumble": 0.78,
+  "colors": ["#e9e9e4", "#b01c1c", "#15171a", "#2a4f8a"],
+  "twoTone": "#121314",
+  "stations": [
+    [0, 0.5, 0, 0.9],
+    [0.02, 0.62, 0, 0.96],
+    [0.1, 0.7, 0, 1],
+    [0.3, 0.82, 0, 1, "ws"],
+    [0.44, 0.86, 1.31, 1, "cab"],
+    [0.66, 0.88, 1.335, 1, "rw"],
+    [0.9, 0.9, 0.98, 1],
+    [0.985, 0.88, 0, 0.97],
+    [1, 0.8, 0, 0.93]
+  ],
+  "headlights": {
+    "x": 0.62,
+    "y": 0.7,
+    "w": 0.3,
+    "h": 0.13,
+    "popup": true
+  },
+  "taillights": {
+    "x": 0.56,
+    "y": 0.78,
+    "w": 0.5,
+    "h": 0.12
+  },
+  "driverSide": 1,
+  "gaugeColor": "#ffb347",
+  "mass": 940,
+  "frontWeight": 0.53,
+  "cgHeight": 0.47,
+  "dragArea": 0.72,
+  "engine": {
+    "idle": 950,
+    "redline": 7700,
+    "torque": [
+      [1000, 95],
+      [3000, 128],
+      [5200, 149],
+      [6600, 140],
+      [7700, 112]
+    ]
+  },
+  "gears": [3.587, 2.022, 1.384, 1, 0.861],
+  "finalDrive": 4.3,
+  "sound": "na4",
+  "grip": 0.98,
+  "brakeG": 0.98
+}

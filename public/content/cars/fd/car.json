@@ -1,0 +1,62 @@
+{
+  "id": "fd",
+  "role": "hero",
+  "name": "Mazda RX-7 Type R (FD3S)",
+  "year": 1993,
+  "length": 4.295,
+  "width": 1.76,
+  "height": 1.23,
+  "wheelbase": 2.425,
+  "frontOverhang": 0.86,
+  "wheelRadius": 0.31,
+  "clearance": 0.13,
+  "tumble": 0.72,
+  "colors": ["#c81e1e", "#f2d21a", "#1a1a1c", "#d9dadc"],
+  "stations": [
+    [0, 0.42, 0, 0.8],
+    [0.03, 0.55, 0, 0.92],
+    [0.12, 0.66, 0, 1],
+    [0.33, 0.78, 0, 1, "ws"],
+    [0.5, 0.82, 1.21, 0.98, "cab"],
+    [0.63, 0.84, 1.23, 0.98, "rw"],
+    [0.86, 0.9, 0.94, 1],
+    [0.97, 0.86, 0, 0.96],
+    [1, 0.7, 0, 0.86]
+  ],
+  "headlights": {
+    "x": 0.62,
+    "y": 0.64,
+    "w": 0.28,
+    "h": 0.12,
+    "popup": true
+  },
+  "taillights": {
+    "x": 0.5,
+    "y": 0.8,
+    "w": 0.62,
+    "h": 0.1
+  },
+  "driverSide": 1,
+  "gaugeColor": "#ffffff",
+  "spoiler": 0.98,
+  "mass": 1260,
+  "frontWeight": 0.5,
+  "cgHeight": 0.44,
+  "dragArea": 0.6,
+  "engine": {
+    "idle": 850,
+    "redline": 8000,
+    "torque": [
+      [1000, 160],
+      [3000, 250],
+      [5000, 294],
+      [6500, 272],
+      [8000, 205]
+    ]
+  },
+  "gears": [3.483, 2.015, 1.391, 1, 0.719],
+  "finalDrive": 4.1,
+  "sound": "rotary",
+  "grip": 1.06,
+  "brakeG": 1.08
+}

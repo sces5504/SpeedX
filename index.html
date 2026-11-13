@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpeedX</title>
+  <link rel="stylesheet" href="/src/ui/style.css">
+</head>
+<body>
+  <!-- The 3D game is drawn into this canvas -->
+  <canvas id="game"></canvas>
+
+  <!-- Heads-up display: everything drawn on top of the 3D picture while driving -->
+  <div id="hud" class="hidden">
+    <div id="status"></div>
+    <div id="timer-box">
+      <span id="timer">00:00.000</span>
+      <span id="timer-extra"></span>
+    </div>
+    <div id="popups"></div>
+    <div id="banner"></div>
+    <div id="prompt"></div>
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <canvas id="gauge" width="260" height="230"></canvas>
+  </div>
+
+  <!-- Full-screen map (press M) -->
+  <div id="map-screen" class="overlay hidden">
+    <canvas id="map-canvas"></canvas>
+    <div class="map-caption" id="map-caption">click a place to travel there &nbsp;—&nbsp; press M to close</div>
+  </div>
+
+  <!-- Main menu -->
+  <div id="menu-main" class="overlay hidden">
+    <div class="menu-panel">
+      <h1>SPEED<span>X</span></h1>
+      <p class="tagline">Angeles Crest Highway · always night</p>
+      <div id="car-list"></div>
+      <div id="car-colors"></div>
+      <div id="map-picker"></div>
+      <button id="btn-start" class="primary">DRIVE</button>
+      <div class="controls-help">
+        <b>W A S D</b> drive &nbsp; <b>SPACE</b> handbrake &nbsp; <b>C</b> camera &nbsp; <b>L</b> lights &nbsp; <b>F</b> flash high beams<br>
+        <b>H</b> horn &nbsp; <b>E</b> interact &nbsp; <b>M</b> map (click a place to go there) &nbsp; <b>BACKSPACE</b> reset car<br>
+        <b>HOLD LEFT MOUSE</b> look around &nbsp; <b>ESC</b> pause · rain · time of night
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause menu -->
+  <div id="menu-pause" class="overlay hidden">
+    <div class="menu-panel small">
+      <h2>PAUSED</h2>
+      <button id="btn-resume" class="primary">RESUME</button>
+      <button id="btn-rain">RAIN: OFF</button>
+      <button id="btn-night">NIGHT: DUSK</button>
+      <button id="btn-garage">CHANGE CAR</button>
+      <div class="controls-help">
+        <b>W A S D</b> drive · <b>SPACE</b> handbrake · <b>C</b> camera · <b>L</b> lights · <b>F</b> flash<br>
+        <b>H</b> horn · <b>E</b> interact · <b>M</b> map · <b>BACKSPACE</b> reset · <b>hold left mouse</b> look around<br><br>
+        Flash a street racer to start a race. Find an orange cone and press <b>E</b> for a time attack —
+        every near miss takes time off the clock.
+      </div>
+    </div>
+  </div>
+
+  <div id="loading">LOADING ANGELES CREST…</div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
