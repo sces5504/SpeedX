@@ -29,6 +29,8 @@
     "w": 0.42,
     "h": 0.1
   },
+  "doors": 4,
+  "moulding": true,
   "taillights": {
     "x": 0.6,
     "y": 0.95,

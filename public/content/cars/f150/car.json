@@ -30,6 +30,7 @@
     "w": 0.3,
     "h": 0.24
   },
+  "moulding": true,
   "taillights": {
     "x": 0.86,
     "y": 1.12,

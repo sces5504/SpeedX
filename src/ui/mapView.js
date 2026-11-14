@@ -2,8 +2,49 @@
 // mapView.js — draws the road as a 2D map: a small round minimap that follows
 // you, and a full-screen map (press M) of the whole highway. On the full map
 // the coloured circles are places: click one to travel there.
+// Also: the little route pictures on the map cards of the main menu.
 // ---------------------------------------------------------------------------
 const POI_COLORS = { gas: '#ff5a4a', mart: '#3ad68a', turnout: '#ffd166' };
+
+// How long a road is, from its list of [x, z] points (metres).
+// closed = the road is a loop, so the piece from the last point back to the first counts too.
+export function routeLength(points, closed = false) {
+  let length = 0;
+  for (let i = 1; i < points.length; i++) length += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+  if (closed) length += Math.hypot(points[0][0] - points[points.length - 1][0], points[0][1] - points[points.length - 1][1]);
+  return length;
+}
+
+// A small picture of a map's road and its stops for the main menu, drawn straight from the
+// map's map.json (`info`) — so every installed map can be shown without loading it.
+export function drawRoutePreview(canvas, info) {
+  const points = info.road, ctx = canvas.getContext('2d');
+  canvas.width = canvas.clientWidth * devicePixelRatio; canvas.height = canvas.clientHeight * devicePixelRatio;
+  const xs = points.map((p) => p[0]), zs = points.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const pad = 14 * devicePixelRatio;
+  const scale = Math.min((canvas.width - pad * 2) / (maxX - minX || 1), (canvas.height - pad * 2) / (maxZ - minZ || 1));
+  const ox = (canvas.width - (maxX - minX) * scale) / 2, oz = (canvas.height - (maxZ - minZ) * scale) / 2;
+  const toScreen = ([x, z]) => [ox + (x - minX) * scale, oz + (z - minZ) * scale];      // north is up, as on the full map
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineJoin = ctx.lineCap = 'round';
+  ctx.strokeStyle = '#cfd8d2'; ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.beginPath();
+  points.forEach((point, i) => { const [x, y] = toScreen(point); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  if (info.loop) ctx.closePath();                            // a loop: join the end to the start
+  ctx.stroke();
+  // The stops, each `s` metres along the road.
+  for (const poi of info.pois || []) {
+    let left = poi.s, at = points[points.length - 1];
+    for (let i = 1; i < points.length; i++) {
+      const step = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+      if (left <= step) { const f = left / (step || 1); at = [points[i - 1][0] + (points[i][0] - points[i - 1][0]) * f, points[i - 1][1] + (points[i][1] - points[i - 1][1]) * f]; break; }
+      left -= step;
+    }
+    const [x, y] = toScreen(at);
+    ctx.fillStyle = POI_COLORS[poi.type] || '#ffffff'; ctx.beginPath(); ctx.arc(x, y, 4 * devicePixelRatio, 0, 7); ctx.fill();
+  }
+}
 
 export function createMapView(map, onPickPoi) {
   const { road } = map;
@@ -21,6 +62,7 @@ export function createMapView(map, onPickPoi) {
         const [x, y] = toScreen(road.x[i], road.z[i]);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
+      if (road.closed) ctx.closePath();                      // a loop: join the end to the start
       ctx.stroke();
     }
     for (const poi of map.pois) {

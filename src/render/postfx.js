@@ -1,20 +1,34 @@
 // ---------------------------------------------------------------------------
 // postfx.js — the "camera" look. The 3D scene is drawn to an off-screen image,
-// then processed like footage from a wide-angle dash cam:
+// then processed like footage from a film camera with a wide-angle lens:
 //
-//   scene -> bloom (lamps glow) -> tone mapping (HDR to screen) -> dash cam pass
+//   scene -> remember -> streak -> bloom -> tone mapping -> lens pass (-> filter)
 //
-// The dash cam pass adds, in order:
+//   remember      keeps a copy of the picture and how far away every pixel is;
+//                 next frame, wet roads mirror it (see materials.js)
+//   streak        long horizontal lines of light from every lamp (streak.js)
+//   bloom         bright things glow
+//   tone mapping  squeezes the huge range of real light (HDR) onto a screen
+//
+// (filter: an optional extra look chosen in the pause menu - filters.js. Off = not there at all.)
+//
+// The lens pass then adds, in order:
 //   lens      barrel (fisheye) distortion and colour fringes
 //   rain      drops and running streaks on the glass that bend the picture,
 //             a misty film, and the arc the wiper has just cleared
 //   speed     motion blur that streaks the edges of the picture
 //   crash     after a big hit: white flash, blur, double vision, colour drains
 //             away and the edges go dark, then it all slowly comes back
-//   grade     greenish night-sensor tint, vignette, film grain
+//   grade     cinema colour: cool teal shadows, warm highlights, deeper
+//             contrast, dark corners (vignette) and film grain
 //
-// Exposure: a real camera darkens the whole picture when bright headlights
-// shine into it, then slowly recovers. The `glare` value drives that.
+// Dazzle: when headlights shine into the camera a white-hot ball of light
+// swamps the lens around each lamp, with a wide warm halo; everything blooms and
+// streaks more, and the "eye" closes down so the rest of the picture goes dark,
+// then slowly recovers. Up to three cars can dazzle at once, each with its own
+// light on the screen that fades in and out where that car is (so the light
+// never slides from one car to another); main.js lists them. GRAPHICS.glare
+// scales the whole effect.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -24,11 +38,19 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FEEL, GRAPHICS } from '../config.js';
 import { damp } from '../core/mathUtils.js';
+import { shared } from './materials.js';
+import { StreakPass } from './streak.js';
+import { FILTERS, filterShader, findFilter } from './filters.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
-const DashCamShader = {
+const DAZZLERS = 3;      // how many cars can dazzle the camera at the same time
+
+const LensShader = {
   uniforms: {
     tDiffuse: { value: null }, uTime: { value: 0 }, uAspect: { value: 1.7 },
     uDistortion: { value: GRAPHICS.lensDistortion }, uGrain: { value: GRAPHICS.grain },
+    uSaturation: { value: GRAPHICS.saturation }, uContrast: { value: GRAPHICS.contrast },
+    uGrade: { value: 1 },       // 1 = apply the cinema colours (step 6), 0 = leave the colours to a filter
     uRain: { value: 0 },        // 0..1 how wet the glass is
     uInside: { value: 0 },      // 1 in cockpit view (windscreen: wipers, drops pushed up by the wind)
     uWiper: { value: 0 },       // 0..1 position in the wiper's back-and-forth cycle
@@ -36,12 +58,17 @@ const DashCamShader = {
     uImpact: { value: 0 },      // 0..1 short blur right at a hit
     uTrauma: { value: 0 },      // 0..1 the long "dazed" effect after a big crash
     uFlash: { value: 0 },       // 0..1 white flash at the moment of a big crash
-    uGlare: { value: 0 },       // 0..1 veiling haze from oncoming lights
+    uGlare: { value: 0 },       // 0..2 how dazzled the camera is, all cars together
+    uGlarePower: { value: new Array(DAZZLERS).fill(0) },                                             // ...and by each car
+    uGlareAt: { value: Array.from({ length: DAZZLERS }, () => new THREE.Vector4(0.5, 0.5, 0.5, 0.5)) },   // where that car's two lamps are on the screen (x, y, x, y in 0..1)
   },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: `
     uniform sampler2D tDiffuse;
-    uniform float uTime, uAspect, uDistortion, uGrain, uRain, uInside, uWiper, uSpeed, uImpact, uTrauma, uFlash, uGlare;
+    uniform float uTime, uAspect, uDistortion, uGrain, uSaturation, uContrast, uRain, uInside, uWiper, uSpeed, uImpact, uTrauma, uFlash, uGlare, uGrade;
+    #define DAZZLERS ${DAZZLERS}
+    uniform float uGlarePower[DAZZLERS];
+    uniform vec4 uGlareAt[DAZZLERS];
     varying vec2 vUv;
 
     vec4 hash4(vec2 p) {
@@ -86,6 +113,7 @@ const DashCamShader = {
       vec2 c = vUv - 0.5;
       float r2 = dot(c * vec2(uAspect, 1.0), c * vec2(uAspect, 1.0));
       vec2 uv = 0.5 + c * (1.0 + uDistortion * r2) / (1.0 + uDistortion * 0.42);
+      vec2 sceneUv = uv;                                       // which point of the 3D picture this pixel shows
 
       // 2. water on the glass
       float mist = 0.0, wet = 0.0;
@@ -128,15 +156,40 @@ const DashCamShader = {
       }
       col += uFlash;
 
-      // 5. glare haze: bright lamps in your face wash out the shadows
-      col = mix(col, vec3(0.6, 0.66, 0.72), uGlare * 0.10 * (1.0 - r2));
+      // 5. dazzle: headlights aimed at you swamp the lens. Every car that dazzles has its own
+      //    light, drawn where its two lamps are: round EACH lamp a white-hot core that fades out
+      //    a long way (bigger the harder that car dazzles), a line of light sideways through
+      //    them like the streak filter draws, and a wide warm halo. All of them together add a
+      //    thin veil over everything. (sceneUv: the lamps are measured before the lens bends the picture.)
+      if (uGlare > 0.003) {
+        vec2 wide = vec2(uAspect * 0.75, 1.0);                                            // the glow is a little wider than tall
+        vec3 light = vec3(1.0, 0.95, 0.86) * uGlare * 0.015;
+        for (int i = 0; i < DAZZLERS; i++) {
+          float power = uGlarePower[i];
+          if (power < 0.003) continue;
+          vec4 lamps = uGlareAt[i];
+          vec2 fromA = (sceneUv - lamps.xy) * wide, fromB = (sceneUv - lamps.zw) * wide;
+          vec2 fromMiddle = (sceneUv - (lamps.xy + lamps.zw) * 0.5) * vec2(uAspect, 1.0);
+          float size = 0.0013 + 0.0038 * power;
+          // (power 1.5: the core is small and the light falls away gradually, with no hard edge)
+          float balls = 1.0 / pow(1.0 + dot(fromA, fromA) / size, 1.5) + 1.0 / pow(1.0 + dot(fromB, fromB) / size, 1.5);
+          float halo = exp(-dot(fromMiddle, fromMiddle) / 0.16);
+          float line = exp(-fromMiddle.y * fromMiddle.y / 0.0005) * exp(-fromMiddle.x * fromMiddle.x / 0.4);
+          light += vec3(1.0, 0.94, 0.84) * power * (balls * 0.55 + halo * 0.16) + vec3(0.7, 0.82, 1.0) * power * line * 0.2;
+        }
+        light = min(light, vec3(1.0));
+        col = 1.0 - (1.0 - min(col, vec3(1.0))) * (1.0 - light);     // added the way light adds on film: it can reach white, never go past it
+      }
 
-      // 6. night-sensor colour: lifted green-teal shadows, slightly crushed colour
+      // 6. cinema colour: richer colour, cool teal shadows, warm highlights, deeper contrast
+      //    (skipped while a filter that brings its own colours is on - see filters.js)
       float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(luma), col, 0.88);
-      col *= vec3(0.955, 1.03, 0.94);
-      col += vec3(0.004, 0.016, 0.009) * (1.0 - smoothstep(0.0, 0.5, luma));
-      col = (col - 0.5) * 1.06 + 0.5;
+      if (uGrade > 0.5) {
+        col = mix(vec3(luma), col, uSaturation);
+        col *= mix(vec3(0.86, 1.0, 1.16), vec3(1.07, 1.0, 0.92), smoothstep(0.03, 0.6, luma));
+        col = mix(col, col * col * (3.0 - 2.0 * col), uContrast);                 // S-curve: darker darks, brighter brights
+        col += vec3(0.002, 0.007, 0.012) * (1.0 - smoothstep(0.0, 0.35, luma));   // blacks are never quite black on film
+      }
 
       // 7. vignette (tighter at speed: tunnel vision) and grain
       col *= 1.0 - (0.5 + uSpeed * 0.38) * smoothstep(0.08 - uSpeed * 0.04, 0.95 - uSpeed * 0.25, r2);
@@ -147,21 +200,72 @@ const DashCamShader = {
     }`,
 };
 
+// Keeps a half-size copy of the finished 3D picture for the wet-road mirror:
+// rgb = colour, a = distance from the camera in metres. Blurry smaller versions
+// (mipmaps) are made automatically; rough surfaces reflect those.
+class RememberPass extends Pass {
+  constructor(camera) {
+    super();
+    this.needsSwap = false;                    // the picture itself is passed on untouched
+    this.camera = camera;
+    this.history = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false,
+      generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+    this.quad = new FullScreenQuad(new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+      fragmentShader: `
+        #include <packing>
+        uniform sampler2D tDiffuse, tDepth; uniform float uNear, uFar; varying vec2 vUv;
+        void main() {
+          float distance = -perspectiveDepthToViewZ(texture2D(tDepth, vUv).x, uNear, uFar);
+          gl_FragColor = vec4(min(texture2D(tDiffuse, vUv).rgb, vec3(60.0)), distance);
+        }`,
+    }));
+  }
+  setSize(width, height) { this.history.setSize(Math.max(1, width >> 1), Math.max(1, height >> 1)); }
+  render(renderer, writeBuffer, readBuffer) {
+    const u = this.quad.material.uniforms;
+    u.tDiffuse.value = readBuffer.texture; u.tDepth.value = readBuffer.depthTexture;
+    u.uNear.value = this.camera.near; u.uFar.value = this.camera.far;
+    renderer.setRenderTarget(this.history);
+    this.quad.render(renderer);
+    shared.history.value = this.history.texture;
+    shared.prevViewProj.value.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+  }
+}
+
 export function createPostFx(renderer, scene, camera) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const target = new THREE.WebGLRenderTarget(Math.max(1, size.x), Math.max(1, size.y), { type: THREE.HalfFloatType, samples: GRAPHICS.msaaSamples });
+  target.depthTexture = new THREE.DepthTexture(target.width, target.height);       // the remember pass reads distances from this
   const composer = new EffectComposer(renderer, target);
-  const renderPass = new RenderPass(scene, camera);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), GRAPHICS.bloomStrength, GRAPHICS.bloomRadius, GRAPHICS.bloomThreshold);
-  const dashCam = new ShaderPass(DashCamShader);
-  composer.addPass(renderPass);
+  const streak = new StreakPass(GRAPHICS.streakTint);
+  const lens = new ShaderPass(LensShader);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new RememberPass(camera));
+  composer.addPass(streak);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
-  composer.addPass(dashCam);
+  composer.addPass(lens);
+  // One more pass per filter, after everything else; all switched off until one is chosen.
+  const filterPasses = new Map();
+  for (const filter of FILTERS) {
+    if (!filter.glsl) continue;
+    const pass = new ShaderPass(filterShader(filter));
+    pass.enabled = false;
+    composer.addPass(pass);
+    filterPasses.set(filter.id, pass);
+  }
+  let filter = FILTERS[0];
+  // A camera dial (bloom, streak, grain...): the filter's own value if it has one, otherwise config.js.
+  const dial = (name) => filter.camera?.[name] ?? GRAPHICS[name];
 
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  const u = dashCam.uniforms;
+  const u = lens.uniforms;
   let exposure = 1, glareNow = 0, impact = 0, trauma = 0, flash = 0;
+  // One slot per dazzling car: which car (id), and how strong its light is on the screen right now.
+  const slots = Array.from({ length: DAZZLERS }, () => ({ id: null, power: 0 }));
 
   const fx = {
     composer, uniforms: u,
@@ -169,6 +273,14 @@ export function createPostFx(renderer, scene, camera) {
     resize(width, height) {
       composer.setSize(width, height);
       u.uAspect.value = width / height;
+      for (const pass of filterPasses.values()) pass.uniforms.uAspect.value = width / height;
+    },
+    // The filter that is on ('off' = none). Choose one by its id in filters.js.
+    get filter() { return filter; },
+    setFilter(id) {
+      filter = findFilter(id);
+      for (const [filterId, pass] of filterPasses) pass.enabled = filterId === filter.id;
+      u.uGrade.value = filter.ownColours ? 0 : 1;
     },
     // Any hit: a short blur. strength 0..1
     punch(strength) { impact = Math.max(impact, strength); },
@@ -178,21 +290,53 @@ export function createPostFx(renderer, scene, camera) {
       flash = Math.max(flash, strength * 0.9 * FEEL.crashFx);
     },
     /**
-     * @param glare        0..1+ how much light oncoming lamps throw at the camera
+     * @param dazzlers     the cars dazzling the camera right now, strongest first:
+     *                     [{ id, power: 0..2, at: [x, y, x, y] }]  (id = anything that stays the same for
+     *                     that car; at = where its two lamps are on the screen, 0..1)
      * @param baseExposure brightness of the current time-of-night preset
      * @param rain         0..1 wetness of the glass      @param wiper 0..1 wiper cycle position
      * @param speed        0..1 for motion blur
      */
-    render(dt, { glare, baseExposure, rain, inside, wiper, speed }) {
-      // Eyes/cameras close down fast when dazzled and open up slowly afterwards.
-      glareNow = damp(glareNow, glare, glare > glareNow ? 9 : 1.4, dt);
-      exposure = baseExposure / (1 + glareNow * 1.2);
+    render(dt, { dazzlers = [], baseExposure, rain, inside, wiper, speed }) {
+      // Dazzle arrives at once: everything blooms and streaks. The eye then closes down
+      // (a little slower, so there is a moment of white-out) and opens up slowly afterwards.
+      // Each dazzling car keeps its own slot for as long as it dazzles. Its light arrives at
+      // once, follows the car, and when the car stops dazzling fades out WHERE IT IS - it is
+      // never handed to another car. A new car takes an empty slot (or the faintest one).
+      const wanted = slots.map(() => 0);
+      for (const source of dazzlers) {
+        let k = slots.findIndex((slot) => slot.id === source.id);
+        if (k < 0) {
+          k = slots.reduce((faintest, slot, i) => (slot.power < slots[faintest].power ? i : faintest), 0);
+          if (slots[k].power > 0.05 && slots[k].power > source.power) continue;      // all slots busy with stronger lights
+          slots[k].id = source.id; slots[k].power = Math.min(slots[k].power, 0.02);
+        }
+        wanted[k] = Math.min(source.power, 2) * GRAPHICS.glare;
+        u.uGlareAt.value[k].fromArray(source.at);
+      }
+      let glare = 0, dazzle = 0;
+      slots.forEach((slot, k) => {
+        slot.power = damp(slot.power, wanted[k], wanted[k] > slot.power ? 14 : 2.5, dt);
+        if (wanted[k] === 0 && slot.power < 0.005) slot.id = null;
+        u.uGlarePower.value[k] = slot.power;
+        glare += wanted[k]; dazzle += slot.power;
+      });
+      glare = Math.min(glare, 2); dazzle = Math.min(dazzle, 2);
+      glareNow = damp(glareNow, glare, glare > glareNow ? 4 : 1.4, dt);
+      exposure = baseExposure / (1 + glareNow * 0.9);
+      bloom.strength = dial('bloomStrength') * (1 + dazzle * 0.15);
+      bloom.radius = dial('bloomRadius'); bloom.threshold = dial('bloomThreshold');
+      streak.strength = dial('streak') * (1 + dazzle * 0.4);
+      streak.enabled = streak.strength > 0;
+      u.uDistortion.value = dial('lensDistortion'); u.uGrain.value = dial('grain');
+      const filterPass = filterPasses.get(filter.id);
+      if (filterPass) filterPass.uniforms.uTime.value = u.uTime.value;
       renderer.toneMappingExposure = exposure * (1 - trauma * 0.35);
       impact = damp(impact, 0, 4.5, dt);
       trauma = Math.max(0, trauma - dt / 3.2);            // about three seconds to recover fully
       flash = damp(flash, 0, 9, dt);
       u.uTime.value += dt;
-      u.uGlare.value = Math.min(1, glareNow);
+      u.uGlare.value = dazzle;
       u.uImpact.value = impact;
       u.uTrauma.value = trauma * trauma * (3 - 2 * trauma);
       u.uFlash.value = flash;

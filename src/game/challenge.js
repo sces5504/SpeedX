@@ -30,6 +30,7 @@ export function createChallenge(scene, map) {
     const p = map.pointAt(s, 0);
     gate.position.set(p.x, p.y, p.z);
     gate.rotation.y = p.yaw;
+    gate.scale.x = map.at(map.road.half, s) / ROAD.paveHalfWidth;      // as wide as the road is there
     gate.visible = true;
   }
 
@@ -42,12 +43,12 @@ export function createChallenge(scene, map) {
     showGate, hideGate() { gate.visible = false; },
 
     start(poi, playerS, dir) {
-      const length = Math.min(GAMEPLAY.challengeLength, dir > 0 ? map.road.length - 150 - playerS : playerS - 150);
+      const length = Math.min(GAMEPLAY.challengeLength, map.roomAhead(playerS, dir) - 150);    // (a loop never runs out of road)
       if (length < 800) return false;                       // too close to the end of the road
       const id = poi.id + (dir > 0 ? '-up' : '-down');
       const saved = parseFloat(localStorage.getItem(bestKey(id)));
       Object.assign(challenge, { state: 'running', time: 0, bonus: 0, penalty: 0, nearMisses: 0, startS: playerS,
-        finishS: playerS + dir * length, dir, id, best: Number.isFinite(saved) ? saved : null, length });
+        finishS: map.wrap(playerS + dir * length), progress: 0, lastS: playerS, dir, id, best: Number.isFinite(saved) ? saved : null, length });
       showGate(challenge.finishS);
       return true;
     },
@@ -55,7 +56,7 @@ export function createChallenge(scene, map) {
 
     // Clock shown on the HUD: time driven, minus near-miss bonuses, plus crash penalties.
     get clock() { return Math.max(0, challenge.time - challenge.bonus + challenge.penalty); },
-    get remaining() { return Math.max(0, (challenge.finishS - challenge.playerS) * challenge.dir); },
+    get remaining() { return Math.max(0, challenge.length - challenge.progress); },
 
     crash() { if (challenge.state === 'running') challenge.penalty += GAMEPLAY.crashPenalty; },
 
@@ -65,13 +66,17 @@ export function createChallenge(scene, map) {
       if (challenge.comboTimer <= 0) challenge.combo = 0;
       if (challenge.state === 'running') {
         challenge.time += dt;
-        if ((playerS - challenge.finishS) * challenge.dir >= 0) {
+        // Metres driven toward the finish, added up frame by frame (on a loop the position itself
+        // jumps back to 0 once per lap, so "position now minus start" would be wrong).
+        challenge.progress += map.ahead(challenge.lastS, playerS) * challenge.dir;
+        challenge.lastS = playerS;
+        if (challenge.progress >= challenge.length) {
           challenge.finalTime = challenge.clock;
           challenge.newBest = challenge.best === null || challenge.finalTime < challenge.best;
           if (challenge.newBest) localStorage.setItem(bestKey(challenge.id), challenge.finalTime.toFixed(3));
           challenge.state = 'finished'; challenge.finishedTimer = 7;
           gate.visible = false;
-        } else if ((playerS - challenge.startS) * challenge.dir < -150) challenge.cancel();   // drove off the other way
+        } else if (challenge.progress < -150) challenge.cancel();   // drove off the other way
       } else if (challenge.state === 'finished') {
         challenge.finishedTimer -= dt;
         if (challenge.finishedTimer <= 0) challenge.state = 'idle';

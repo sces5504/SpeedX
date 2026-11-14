@@ -29,12 +29,15 @@
     "w": 0.36,
     "h": 0.15
   },
+  "doors": 4,
+  "moulding": true,
   "taillights": {
     "x": 0.6,
     "y": 0.84,
     "w": 0.5,
     "h": 0.15
   },
+  "interior": { "seats": "#33343a", "dash": "#1c1c1f", "carpet": "#121214", "accent": "#c8c8cc" },
   "driverSide": -1,
   "gaugeColor": "#ffd9a0",
   "spoiler": 1.24,

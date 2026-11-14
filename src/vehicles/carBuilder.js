@@ -7,28 +7,43 @@
 //   car.wheels[4]    FL, FR, RL, RR — each has .pivot (steer / suspension)
 //                    and .spin (rolls). Every wheel is its own object.
 //   car.lamps        every lamp is its own mesh with its own material:
-//                    head[2], tail[2], brake[2], reverse[2], signalL[2], signalR[2]
+//                    head[2], tail[2], brake[2], reverse[2], signalL[3], signalR[3]
+//                    (lenses, body lines, mirrors and other fittings: carDetails.js)
 //   car.setLights()  convenient switchboard for all of the above
 //
 // Local axes of a car: forward = -Z, right = +X, up = +Y. The origin is on the
 // ground under the centre of gravity.
 //
 // If the car has a model.glb (see carModel.js) its body and wheels come from
-// that model; otherwise a simple shell is generated from the "stations" in
-// car.json. Lamps, licence plates and the light switchboard are the same either way.
+// that model; otherwise a smooth shell (carShell.js) and wheels (carWheel.js)
+// are generated from the measurements and side profile in car.json. Lamps, licence plates and the light switchboard are the same either way.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { lerp } from '../core/mathUtils.js';
-import { canvasTexture, enhanceMaterial, makeGlowTexture } from '../render/materials.js';
+import { beamMaterial, canvasTexture, enhanceMaterial, makeGlowTexture } from '../render/materials.js';
 import { getCarModel } from './carModel.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { shellGeometry, shellSurface } from './carShell.js';
+import { addBodyDetails, buildLamp, chrome, plateGeometry, rubber } from './carDetails.js';
+import { buildWheel } from './carWheel.js';
+import { smallLights } from '../render/smallLights.js';
+import { carReflection } from '../render/reflections.js';
 
+// Bodywork lit by headlights from a few metres away would be far brighter than anything else
+// in the picture and bloom into one huge white ball. This limit (see enhanceMaterial) lets it get
+// just bright enough to glow a little (GRAPHICS.bloomThreshold is 1.25) and no further.
+export const PAINT_LIMIT = 1.5;
 const glowTexture = makeGlowTexture();
-const rubber = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.9 });
-const trimMat = new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.7 });
-const glassMat = new THREE.MeshStandardMaterial({ color: 0x05070a, roughness: 0.06, metalness: 0.9 });
+const lampSpot = new THREE.Vector3();
+// Cone for the visible beam of ONE headlight: its narrow end is at the lamp (the origin) and
+// it reaches 14 m forward (-Z).
+const beamConeGeometry = new THREE.CylinderGeometry(0.07, 0.95, 14, 16, 1, true).rotateX(Math.PI / 2).translate(0, 0, -7);
+const trimMat = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.7 }), { limit: PAINT_LIMIT });
+const shellTrim = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.7, vertexColors: true }), { limit: PAINT_LIMIT });   // underside: shaded by the shell's vertex colours
+const glassMat = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x05070a, roughness: 0.06, metalness: 0.9, envMap: carReflection }), { limit: PAINT_LIMIT });
 const archMat = new THREE.MeshBasicMaterial({ color: 0x020202 });
-const rimTexture = makeRimTexture();
-const rimMat = new THREE.MeshStandardMaterial({ map: rimTexture, roughness: 0.35, metalness: 0.7, transparent: true });
+// The red strip between the tail lamps of some cars: it shines back at headlights like a reflector.
+const reflectorRed = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x5a0808, roughness: 0.15, envMap: carReflection }), { retro: 0.5, limit: PAINT_LIMIT });
 const poolTexture = makePoolTexture();
 const shadowTexture = canvasTexture(64, 64, (g, w, h) => {
   const grad = g.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
@@ -51,21 +66,25 @@ export function buildCar(spec, colorHex) {
   group.add(body);
 
   // ---- Body: a real model if the car has one, otherwise the generated shell ----------
-  let paint, shell;
+  let paint, partPaint, shell;
   if (model) {
     // White-painted models are tinted with the chosen colour (texture x colour).
     paint = model.material.clone();
     paint.color.set(colorHex);
     shell = new THREE.Mesh(model.body, paint);
   } else {
-    paint = new THREE.MeshPhysicalMaterial({ color: colorHex, roughness: 0.38, metalness: 0.45, clearcoat: 0.8, clearcoatRoughness: 0.12 });
-    const lower = spec.twoTone !== undefined ? new THREE.MeshPhysicalMaterial({ color: spec.twoTone, roughness: 0.4, metalness: 0.4, clearcoat: 0.6 }) : paint;
-    shell = new THREE.Mesh(shellGeometry(spec, dims), [paint, glassMat, trimMat, lower]);
+    // Metallic paint under a glossy clear coat. vertexColors: the shell is darker underneath (carShell.js).
+    const paintLook = { roughness: 0.42, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.07, envMap: carReflection, envMapIntensity: 1.25 };
+    const painted = (color, vertexColors) => enhanceMaterial(new THREE.MeshPhysicalMaterial({ color, ...paintLook, vertexColors }), { limit: PAINT_LIMIT });
+    paint = painted(colorHex, true);
+    partPaint = painted(colorHex, false);                    // for bolted-on parts (mirrors, wing, lamp pods), which have no shading of their own
+    const lower = spec.twoTone !== undefined ? painted(spec.twoTone, true) : paint;
+    shell = new THREE.Mesh(shellGeometry(spec, dims), [paint, glassMat, shellTrim, lower]);
   }
   shell.castShadow = true;
   shell.name = 'body_shell';
   body.add(shell);
-  const detailPaint = model ? new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.45, metalness: 0.3 }) : paint;
+  const detailPaint = model ? new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.45, metalness: 0.3 }) : partPaint;
 
   // Where is the surface of the nose (or tail) at a given spot? Lamps and plates sit there.
   // With a real model we shoot a ray at it; with the shell we know the shape.
@@ -89,54 +108,80 @@ export function buildCar(spec, colorHex) {
   const add = (mesh, x, y, z, parent = body) => { mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
   const box = (w, h, d, material) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
 
-  // ---- Lamps (each one separate) -----------------------------------------------
-  const lampMaterial = (color) => new THREE.MeshStandardMaterial({ color: 0x1a1a1a, emissive: color, emissiveIntensity: 0, roughness: 0.25 });
+  // ---- Lamps (each one its own mesh and material, so each can be lit alone) -------------
   const lamps = { head: [], tail: [], brake: [], reverse: [], signalL: [], signalR: [], pods: [] };
   const glows = { head: [], tail: [] };
   const H = spec.headlights, T = spec.taillights;
+  const RED = 0xff1505, AMBER = 0xff8a00;
+  const thin = model ? 0.012 : 0.03;          // a real model has its lamps painted on: ours are then thin glowing covers
+  const beamMat = beamMaterial(0xfff0d8, 0.3);
   for (const side of [-1, 1]) {
     const name = side < 0 ? 'L' : 'R';
     // Headlight — fixed in the nose, or a pop-up pod on the bonnet
-    const head = box(H.w, H.h, 0.1, lampMaterial(0xfff2d8));
+    const head = buildLamp(H.w, H.h, 0xfff2d8, { facing: -1, depth: thin });
     head.name = 'light_head_' + name;
     if (H.popup) {
       const pod = new THREE.Group();
       const podZ = frontZ + spec.length * 0.085;
-      pod.add(box(H.w + 0.06, H.h + 0.04, 0.26, detailPaint));
-      head.position.set(0, 0, -0.1);
+      pod.add(new THREE.Mesh(new RoundedBoxGeometry(H.w + 0.07, H.h + 0.05, 0.3, 2, 0.02), detailPaint));
+      head.position.set(0, 0, -0.145);
       pod.add(head);
       pod.userData.upY = H.y + H.h / 2 + 0.01;
-      pod.userData.downY = H.y - H.h / 2 - 0.05;
+      pod.userData.downY = H.y - H.h / 2 - 0.06;
       pod.position.set(side * H.x * halfW, pod.userData.downY, podZ);
       body.add(pod);
       lamps.pods.push(pod);
     } else {
-      head.scale.z = model ? 0.3 : 1;
       const hx = seatX(side * H.x * halfW, H.y, false);
-      add(head, hx, H.y, zAtHeight(H.y, false, hx) - 0.02);
+      add(head, hx, H.y, zAtHeight(H.y, false, hx) + 0.008);
     }
     lamps.head.push(head);
-    // Rear cluster: tail lamp outside, brake lamp inside, small reverse lamp, amber signal
-    // On a real model the lamps are already painted on, so ours are thin glowing plates over them.
-    const lampDepth = model ? 0.03 : 0.08, lampH = model ? T.h * 0.7 : T.h, lampW = model ? 0.8 : 1;
-    const rearLamp = (w, h, color, x, y) => {
-      const sx = seatX(side * x, y, true);
-      return add(box(w, h, lampDepth, lampMaterial(color)), sx, y, zAtHeight(y, true, sx) + (model ? -0.005 : 0.02));
-    };
-    const tail = rearLamp(T.w * 0.55 * lampW, lampH, 0xff1505, T.x * halfW + T.w * 0.2 * lampW, T.y);
-    const brake = rearLamp(T.w * 0.4 * lampW, lampH, 0xff1505, T.x * halfW - T.w * 0.28 * lampW, T.y);
-    const reverse = rearLamp(0.1, 0.05, 0xffffff, T.x * halfW - T.w * 0.28, T.y - T.h / 2 - 0.04);
+    // The beam as a cone of lit air, starting AT this lamp (so it follows a pop-up lamp too).
+    const cone = new THREE.Mesh(beamConeGeometry, beamMat);
+    cone.scale.set(1.5, 0.6, 1);                              // wide and flat
+    cone.rotation.x = -0.035;                                 // dipped toward the road
+    cone.position.z = -thin;
+    cone.name = 'beam';
+    head.add(cone);
+
+    // Rear cluster, from the outside in: amber indicator, tail lamp, brake lamp; a small white
+    // reversing lamp underneath. "style": "round" in car.json gives three round lamps instead.
+    const rear = (lamp, x, y) => { const sx = seatX(side * x, y, true); return add(lamp, sx, y, zAtHeight(y, true, sx) - 0.008); };
+    const outer = T.x * halfW + T.w / 2;                      // outer edge of the cluster
+    let tail, brake, sigRear;
+    if (T.style === 'round') {
+      const d = Math.min(T.h * 1.3, (T.w - 0.05) / 3), step = d + 0.025;
+      tail = rear(buildLamp(d, d, RED, { round: true, depth: thin }), outer - d / 2, T.y);
+      brake = rear(buildLamp(d, d, RED, { round: true, depth: thin }), outer - d / 2 - step, T.y);
+      sigRear = rear(buildLamp(d * 0.8, d * 0.8, AMBER, { round: true, depth: thin }), outer - d / 2 - step * 2 + d * 0.1, T.y);
+    } else if (T.h > T.w) {                                   // a tall cluster (vans, SUVs): stacked instead
+      const x = T.x * halfW, top = T.y + T.h / 2;
+      tail = rear(buildLamp(T.w, T.h * 0.44, RED, { depth: thin }), x, top - T.h * 0.22);
+      brake = rear(buildLamp(T.w, T.h * 0.3, RED, { depth: thin }), x, top - T.h * 0.61);
+      sigRear = rear(buildLamp(T.w, T.h * 0.2, AMBER, { depth: thin }), x, top - T.h * 0.9);
+    } else {
+      const wSignal = T.w * 0.17, wTail = T.w * 0.42, wBrake = T.w * 0.35, space = T.w * 0.03;
+      sigRear = rear(buildLamp(wSignal, T.h, AMBER, { depth: thin }), outer - wSignal / 2, T.y);
+      tail = rear(buildLamp(wTail, T.h, RED, { depth: thin }), outer - wSignal - space - wTail / 2, T.y);
+      brake = rear(buildLamp(wBrake, T.h, RED, { depth: thin }), outer - wSignal - wTail - space * 2 - wBrake / 2, T.y);
+    }
+    const reverse = rear(buildLamp(0.1, 0.045, 0xffffff, { depth: thin * 0.6 }), T.x * halfW - T.w * 0.25, T.y - T.h / 2 - 0.05);
     tail.name = 'light_tail_' + name; brake.name = 'light_brake_' + name; reverse.name = 'light_reverse_' + name;
     lamps.tail.push(tail); lamps.brake.push(brake); lamps.reverse.push(reverse);
-    const noseSignalY = spec.stations[0][1] - 0.04, sfx = seatX(side * halfW * 0.82, noseSignalY, false);
-    const sigFront = add(box(0.12, 0.06, model ? 0.03 : 0.08, lampMaterial(0xff8a00)), sfx, noseSignalY, zAtHeight(noseSignalY, false, sfx) + (model ? 0.005 : -0.02));
-    const sigRear = rearLamp(0.07, lampH, 0xff8a00, Math.min(halfW * 0.9, T.x * halfW + T.w * 0.5 * lampW), T.y);
+    const noseSignalY = spec.stations[0][1] - 0.04, sfx = seatX(side * halfW * 0.8, noseSignalY, false);
+    const sigFront = add(buildLamp(0.14, 0.05, AMBER, { facing: -1, depth: thin * 0.6 }), sfx, noseSignalY, zAtHeight(noseSignalY, false, sfx) + 0.006);
     sigFront.name = 'light_signal_front_' + name; sigRear.name = 'light_signal_rear_' + name;
     (side < 0 ? lamps.signalL : lamps.signalR).push(sigFront, sigRear);
 
     // Soft flares so lamps are visible from far away
     const headGlow = flare(0xfff0d0, 1); head.add(headGlow); headGlow.position.z = -0.12; glows.head.push(headGlow);
     const tailGlow = flare(0xff2010, 0.5); tail.add(tailGlow); tailGlow.position.z = 0.1; glows.tail.push(tailGlow);
+  }
+  // A panel between the two rear clusters ("garnish": "red" = a reflector strip, "black" = plain).
+  if (T.garnish && !model) {
+    const width = 2 * (T.x * halfW - T.w / 2) - 0.03;
+    const panel = new THREE.Mesh(plateGeometry(width, T.h + 0.024, 0.022, 0.02), T.garnish === 'red' ? reflectorRed : rubber);
+    add(panel, 0, T.y, zAtHeight(T.y, true) - 0.008);
   }
 
   // ---- Licence plates (each car gets its own random number) -----------------------
@@ -147,15 +192,22 @@ export function buildCar(spec, colorHex) {
   frontPlate.rotation.y = Math.PI;                              // faces forward
   add(new THREE.Mesh(plateGeo, plate.material), 0, plateRearY, zAtHeight(plateRearY, true) + 0.015);
 
-  // ---- Small details the generated shell needs (a real model already has them) -------
-  const cowl = spec.stations.find((s) => s[4] === 'ws');
-  const cowlZ = frontZ + cowl[0] * spec.length;
+  // ---- The details that make the generated shell a car (a real model already has them) -------
   if (!model) {
-    add(box(halfW * (spec.grille ? 0.9 : 1.1), spec.grille ? 0.16 : 0.09, 0.05, trimMat), 0, spec.grille ? H.y : noseY - 0.13, zAtHeight(spec.grille ? H.y : noseY - 0.13) - 0.012);
-    for (const side of [-1, 1]) add(box(0.16, 0.1, 0.07, paint), side * (halfW + 0.07), cowl[1] + 0.1, cowlZ + 0.42);   // mirrors
+    const { repeaters } = addBodyDetails(body, shellSurface(spec, dims), spec, dims, detailPaint);
+    lamps.signalL.push(...repeaters.L); lamps.signalR.push(...repeaters.R);
+    if (spec.grille) {
+      // A radiator grille between the headlights: chrome frame, dark inside, chrome bars.
+      const width = 2 * (H.x * halfW - H.w / 2) - 0.05, z = zAtHeight(H.y) + 0.006;
+      const frame = (w, h, depth, material) => add(new THREE.Mesh(plateGeometry(w, h, depth, 0.015).rotateY(Math.PI), material), 0, H.y, z);
+      frame(width, H.h + 0.01, 0.02, chrome); frame(width - 0.03, H.h - 0.02, 0.026, rubber);
+      for (const y of [-0.3, 0, 0.3]) add(box(width - 0.04, 0.008, 0.01, chrome), 0, H.y + y * H.h, z - 0.026);
+    }
     if (spec.spoiler) {
-      add(box(spec.width * 0.92, 0.035, 0.26, paint), 0, spec.spoiler, rearZ - 0.2);
-      for (const side of [-1, 1]) add(box(0.04, spec.spoiler - 0.9, 0.2, paint), side * halfW * 0.72, (spec.spoiler + 0.9) / 2, rearZ - 0.2);
+      // Rear wing: a blade on two posts.
+      add(new THREE.Mesh(new RoundedBoxGeometry(spec.width * 0.94, 0.03, 0.24, 2, 0.012), detailPaint), 0, spec.spoiler, rearZ - 0.2).rotation.x = 0.07;
+      const deckY = T.y + T.h / 2 + 0.04;
+      for (const side of [-1, 1]) add(box(0.035, spec.spoiler - deckY, 0.16, detailPaint), side * halfW * 0.72, (spec.spoiler + deckY) / 2, rearZ - 0.2);
     }
     if (spec.cargoBox) {
       const c = spec.cargoBox, len = (c.to - c.from) * spec.length;
@@ -172,8 +224,7 @@ export function buildCar(spec, colorHex) {
 
   // ---- Wheels (each one its own object so it can spin and steer) ---------------------
   const r = spec.wheelRadius, tyreWidth = r * 0.62;
-  const tyreGeo = new THREE.CylinderGeometry(r, r, tyreWidth, 22).rotateZ(Math.PI / 2);
-  const rimGeo = new THREE.CircleGeometry(r * 0.68, 20);
+  const wheelStyle = spec.role === 'hero' ? { spokes: 8, dark: false } : { spokes: 5, dark: true };   // bright racing rims / plain dark ones
   const wheels = [];
   ['FL', 'FR', 'RL', 'RR'].forEach((name, k) => {
     const side = k % 2 === 0 ? -1 : 1;
@@ -188,19 +239,17 @@ export function buildCar(spec, colorHex) {
       wheel.castShadow = true;
       spin.add(wheel);
     } else {
-      const tyre = new THREE.Mesh(tyreGeo, rubber);
-      tyre.castShadow = true;
-      const rim = new THREE.Mesh(rimGeo, rimMat);
-      rim.position.x = side * (tyreWidth / 2 + 0.004); rim.rotation.y = side * Math.PI / 2;
-      spin.add(tyre, rim);
+      const wheel = buildWheel(r, tyreWidth, wheelStyle);
+      wheel.scale.x = side;                                    // the pretty side faces outward
+      spin.add(wheel);
     }
     pivot.add(spin);
     group.add(pivot);
     wheels.push({ name, pivot, spin, side, z, restY: r });
-    // black disc = the dark inside of the wheel arch
+    // black disc = the dark inner wall of the wheel arch
     const arch = new THREE.Mesh(new THREE.CircleGeometry(r + 0.075, 20), archMat);
     arch.rotation.y = side * Math.PI / 2;
-    add(arch, model ? side * (halfW - r * 0.98) : side * (halfW * 0.985), r + 0.01, z);
+    add(arch, model ? side * (halfW - r * 0.98) : side * (halfW * 0.5), r + 0.01, z);
   });
 
   // ---- Fake pool of light on the road (for AI cars without a real spotlight) -------
@@ -210,6 +259,12 @@ export function buildCar(spec, colorHex) {
   add(pool, 0, 0.05, frontZ - 13.5, group);
   pool.visible = false;
 
+  // Where the lamps' glow lands (left, right): low and a little way off, so it spills over the
+  // road and the things around the car instead of flooding the car's own bodywork.
+  const lampSpots = {
+    head: [-1, 1].map((side) => new THREE.Vector3(side * H.x * halfW, 0.3, frontZ - 1.5)),
+    tail: [-1, 1].map((side) => new THREE.Vector3(side * T.x * halfW, 0.15, rearZ + 1.5)),
+  };
   const car = { spec, group, body, shell, wheels, lamps, glows, pool, dims, paint, plate, lightState: {} };
   // Change the body colour (AI cars are repainted when they are recycled).
   car.setColor = (hex) => { paint.color.set(hex); detailPaint.color.set(hex); };
@@ -218,17 +273,19 @@ export function buildCar(spec, colorHex) {
   // head: 0 off, 1 low beam, 2 high beam.   usePool: draw the fake light on the road.
   car.setLights = ({ head = 0, brake = false, reverse = false, left = false, right = false, usePool = false, poolFade = 1 }) => {
     const set = (list, value) => { for (const m of list) m.material.emissiveIntensity = value; };
-    set(lamps.head, head === 0 ? 0 : head === 1 ? 5 : 12);
+    set(lamps.head, head === 0 ? 0 : head === 1 ? 6 : 10);
     set(lamps.tail, head > 0 ? 1.6 : 0);
     set(lamps.brake, brake ? 7 : head > 0 ? 1.0 : 0);
     set(lamps.reverse, reverse ? 4 : 0);
     set(lamps.signalL, left ? 5 : 0);
     set(lamps.signalR, right ? 5 : 0);
-    for (const g of glows.head) { g.visible = head > 0; g.material.opacity = head === 2 ? 1 : 0.75; g.userData.gain = head === 2 ? 1.9 : 1; }
+    for (const g of glows.head) { g.visible = head > 0; g.material.opacity = head === 2 ? 1 : 0.75; g.userData.gain = head === 2 ? 1.4 : 1; }
     for (const g of glows.tail) { g.visible = head > 0 || brake; g.material.opacity = brake ? 0.9 : 0.45; }
+    for (const lamp of lamps.head) lamp.getObjectByName('beam').visible = head > 0;
+    beamMat.uniforms.uStrength.value = head === 2 ? 0.55 : 0.3;
     pool.visible = usePool && head > 0;
     pool.material.opacity = (head === 2 ? 0.34 : 0.2) * poolFade;
-    car.lightState.head = head; car.lightState.brake = brake;
+    Object.assign(car.lightState, { head, brake, left, right });
   };
   // Call every frame: raises/lowers pop-up headlights and sizes the flares by distance.
   car.updateLights = (dt, cameraPosition) => {
@@ -242,9 +299,21 @@ export function buildCar(spec, colorHex) {
     const yaw = group.rotation.y, facing = (dx * -Math.sin(yaw) + dz * -Math.cos(yaw)) / dist;
     const front = Math.min(1, Math.max(0, facing * 2.5)), back = Math.min(1, Math.max(0, -facing * 2.5));
     // Far lamps would shrink to nothing; real ones stay visible as bright points, so grow with distance.
-    const size = 0.45 + dist * 0.02;
-    for (const g of glows.head) { g.scale.setScalar(size * 1.6 * (g.userData.gain || 1) * (0.3 + 0.7 * front)); g.material.opacity = front * (car.lightState.head === 2 ? 1 : 0.75); }
+    const size = 0.3 + dist * 0.011;
+    for (const g of glows.head) { g.scale.setScalar(size * 1.2 * (g.userData.gain || 1) * (0.3 + 0.7 * front)); g.material.opacity = front * (car.lightState.head === 2 ? 0.8 : 0.55); }
     for (const g of glows.tail) { g.scale.setScalar(size * 0.8); g.material.opacity = back * (car.lightState.brake ? 0.9 : 0.4); }
+  };
+  // Tell smallLights.js about this car's lamps, so they tint the road and whatever is near.
+  // headShare: 0..1 how much of the headlight glow to add (0 when real spotlights do that job).
+  car.addSmallLights = (camera, headShare = 1) => {
+    const state = car.lightState;
+    const offer = (list, hex, power) => {
+      for (const spot of list) { lampSpot.copy(spot).applyMatrix4(group.matrixWorld); smallLights.add(lampSpot.x, lampSpot.y, lampSpot.z, hex, power, camera); }
+    };
+    if (state.head > 0) offer(lampSpots.head, 0xfff0d8, (state.head === 2 ? 150 : 60) * headShare);
+    offer(lampSpots.tail, 0xff1a08, state.brake ? 6 : state.head > 0 ? 2.5 : 0);
+    if (state.left) offer([lampSpots.tail[0]], 0xff8a00, 14);
+    if (state.right) offer([lampSpots.tail[1]], 0xff8a00, 14);
   };
   car.setLights({ head: 0 });
   return car;
@@ -265,7 +334,7 @@ function makePlate() {
   canvas.width = 256; canvas.height = 128;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
-  const material = enhanceMaterial(new THREE.MeshStandardMaterial({ map: texture, roughness: 0.5 }), { retro: 1.6 });
+  const material = enhanceMaterial(new THREE.MeshStandardMaterial({ map: texture, roughness: 0.5 }), { retro: 1.2, limit: PAINT_LIMIT });
   const plate = {
     material, text: '',
     setText(text) {
@@ -281,77 +350,6 @@ function makePlate() {
   };
   plate.setText(randomPlateText());
   return plate;
-}
-
-// ---------------------------------------------------------------------------
-// Shell geometry: a skin stretched over the stations of the spec.
-// ---------------------------------------------------------------------------
-function ringPoints(spec, dims, station, isFirst, isLast) {
-  const [, belt, roof, wf] = station;
-  const w = dims.halfW * wf;
-  const bottom = spec.clearance + (isFirst || isLast ? 0.07 : 0);
-  const hasRoof = roof > belt + 0.2;
-  const top = roof > 0 ? roof : belt;
-  const roofW = hasRoof ? w * spec.tumble : w * 0.86;
-  // Right half, from the middle of the floor up to the middle of the roof.
-  // Each point is higher than the one before it, so the skin never folds over itself.
-  return [
-    [0, bottom], [w * 0.80, bottom], [w * 0.97, bottom + 0.1],
-    [w, lerp(bottom, belt, 0.55)], [w * 0.965, belt - (hasRoof ? 0 : 0.035)],
-    [roofW, hasRoof ? top - 0.05 : top], [roofW * 0.5, top + (hasRoof ? -0.008 : 0.014)], [0, top + (hasRoof ? 0 : 0.02)],
-  ];
-}
-
-function shellGeometry(spec, dims) {
-  // Bands of the skin (indices into the 8 half-ring points) and their material:
-  // 0 paint, 1 glass, 2 black trim, 3 lower paint (two-tone cars)
-  const bands = [
-    { pts: [0, 1, 2], material: () => 2 },
-    { pts: [2, 3], material: () => 3 },
-    { pts: [3, 4], material: () => 0 },
-    { pts: [4, 5], material: (span) => (span === 'cab' ? 1 : 0) },
-    { pts: [5, 6, 7], material: (span) => (span === 'ws' || span === 'rw' ? 1 : 0) },
-  ];
-  const positions = [], indexLists = [[], [], [], []];
-  const stations = spec.stations;
-  const rings = stations.map((st, i) => ringPoints(spec, dims, st, i === 0, i === stations.length - 1));
-  const zOf = (i) => dims.frontZ + stations[i][0] * spec.length;
-
-  for (const mirror of [1, -1]) {
-    for (const band of bands) {
-      const base = positions.length / 3;
-      for (let i = 0; i < stations.length; i++) {
-        for (const p of band.pts) positions.push(rings[i][p][0] * mirror, rings[i][p][1], zOf(i));
-      }
-      const n = band.pts.length;
-      for (let i = 0; i < stations.length - 1; i++) {
-        const list = indexLists[band.material(stations[i][4])];
-        for (let j = 0; j < n - 1; j++) {
-          const A = base + i * n + j, B = A + 1, C = A + n, D = C + 1;
-          if (mirror > 0) list.push(A, B, C, B, D, C); else list.push(A, C, B, B, C, D);
-        }
-      }
-    }
-  }
-  // Flat caps on the nose and tail.
-  for (const [i, facing] of [[0, -1], [stations.length - 1, 1]]) {
-    const base = positions.length / 3, ring = rings[i];
-    for (const mirror of [1, -1]) for (const p of ring) positions.push(p[0] * mirror, p[1], zOf(i));
-    for (const offset of [0, 8]) {
-      for (let j = 1; j < 7; j++) {
-        const A = base + offset, B = base + offset + j, C = B + 1;
-        const flip = (facing > 0) === (offset === 0);
-        if (flip) indexLists[0].push(A, B, C); else indexLists[0].push(A, C, B);
-      }
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  const all = [];
-  indexLists.forEach((list, material) => { geo.addGroup(all.length, list.length, material); all.push(...list); });
-  geo.setIndex(all);
-  geo.computeVertexNormals();
-  return geo;
 }
 
 // Where is the nose (or tail) of the body at a given height? Lamps sit there.
@@ -374,21 +372,6 @@ function flare(color, opacity) {
     map: glowTexture, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
   sprite.visible = false;
   return sprite;
-}
-
-function makeRimTexture() {
-  return canvasTexture(128, 128, (g, w) => {
-    const c = w / 2;
-    g.clearRect(0, 0, w, w);
-    g.fillStyle = '#16171a'; g.beginPath(); g.arc(c, c, c, 0, 7); g.fill();
-    g.strokeStyle = '#c9ccd0'; g.lineWidth = 9; g.beginPath(); g.arc(c, c, c - 6, 0, 7); g.stroke();
-    g.lineWidth = 11; g.lineCap = 'round';
-    for (let k = 0; k < 5; k++) {
-      const ang = (k / 5) * Math.PI * 2;
-      g.beginPath(); g.moveTo(c, c); g.lineTo(c + Math.cos(ang) * (c - 8), c + Math.sin(ang) * (c - 8)); g.stroke();
-    }
-    g.fillStyle = '#9da1a6'; g.beginPath(); g.arc(c, c, 13, 0, 7); g.fill();
-  }, { repeat: false });
 }
 
 function makePoolTexture() {

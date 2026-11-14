@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpeedX 圖鑑</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/src/catalog/catalog.css">
+</head>
+<body>
+  <!-- The catalogue: everything in the game, to browse. It reads the game's own data and code
+       (see src/catalog/catalog.js), so it always shows the game as it is right now. -->
+
+  <!-- Column 1: the sections -->
+  <nav id="sidebar">
+    <a class="brand" href="index.html" title="回到遊戲">SPEED<span>X</span></a>
+    <div class="brand-sub">圖鑑 LIBRARY</div>
+    <div id="sections"></div>
+    <a class="back" href="index.html">← 回到遊戲</a>
+  </nav>
+
+  <!-- Column 2: the items of the open section -->
+  <div id="list"></div>
+
+  <!-- Column 3: the open item — a 3D view (when there is something to show) and its details -->
+  <main id="detail">
+    <div id="stage">
+      <canvas id="view"></canvas>
+      <div id="stage-common"></div>
+      <div id="stage-tools"></div>
+      <div id="stage-hint">拖曳旋轉 · 滾輪縮放</div>
+    </div>
+    <div id="info"></div>
+  </main>
+
+  <div id="loading">載入中…</div>
+
+  <script type="module" src="/src/catalog/catalog.js"></script>
+</body>
+</html>

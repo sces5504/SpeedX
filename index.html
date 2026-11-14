@@ -30,21 +30,33 @@
     <div class="map-caption" id="map-caption">click a place to travel there &nbsp;—&nbsp; press M to close</div>
   </div>
 
-  <!-- Main menu -->
-  <div id="menu-main" class="overlay hidden">
-    <div class="menu-panel">
+  <!-- Main menu: cars down the left, maps down the right, the middle left clear so you can see the car.
+       Both lists are filled in by src/ui/menu.js from whatever cars and maps are installed. -->
+  <div id="menu-main" class="hidden">
+    <section class="menu-side">
       <h1>SPEED<span>X</span></h1>
-      <p class="tagline">Angeles Crest Highway · always night</p>
-      <div id="car-list"></div>
+      <p class="tagline"></p>
+      <h2>CAR</h2>
+      <div id="car-list" class="side-list"></div>
+    </section>
+    <footer class="menu-foot">
+      <div id="car-name"></div>
       <div id="car-colors"></div>
-      <div id="map-picker"></div>
       <button id="btn-start" class="primary">DRIVE</button>
+    </footer>
+    <section class="menu-side">
+      <h2>MAP</h2>
+      <div id="map-list" class="side-list"></div>
       <div class="controls-help">
-        <b>W A S D</b> drive &nbsp; <b>SPACE</b> handbrake &nbsp; <b>C</b> camera &nbsp; <b>L</b> lights &nbsp; <b>F</b> flash high beams<br>
-        <b>H</b> horn &nbsp; <b>E</b> interact &nbsp; <b>M</b> map (click a place to go there) &nbsp; <b>BACKSPACE</b> reset car<br>
-        <b>HOLD LEFT MOUSE</b> look around &nbsp; <b>ESC</b> pause · rain · time of night
+        <b>W A S D</b> drive · <b>SPACE</b> handbrake · <b>C</b> camera<br>
+        <b>L</b> lights · <b>F</b> flash high beams · <b>H</b> horn<br>
+        <b>E</b> interact · <b>M</b> map · <b>BACKSPACE</b> reset car<br>
+        <b>HOLD LEFT MOUSE</b> look around<br>
+        <b>ESC</b> pause · rain · night · picture filter
       </div>
-    </div>
+      <!-- The catalogue of everything in the game: a separate page (catalog.html, src/catalog/) -->
+      <a class="library-link" href="catalog.html" target="_blank" rel="noopener">LIBRARY ↗</a>
+    </section>
   </div>
 
   <!-- Pause menu -->
@@ -54,6 +66,7 @@
       <button id="btn-resume" class="primary">RESUME</button>
       <button id="btn-rain">RAIN: OFF</button>
       <button id="btn-night">NIGHT: DUSK</button>
+      <button id="btn-filter">FILTER: OFF</button>
       <button id="btn-garage">CHANGE CAR</button>
       <div class="controls-help">
         <b>W A S D</b> drive · <b>SPACE</b> handbrake · <b>C</b> camera · <b>L</b> lights · <b>F</b> flash<br>
@@ -64,7 +77,7 @@
     </div>
   </div>
 
-  <div id="loading">LOADING ANGELES CREST…</div>
+  <div id="loading">LOADING…</div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

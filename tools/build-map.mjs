@@ -11,6 +11,13 @@
 //   --start   latitude,longitude where the drive begins (pick it on openstreetmap.org)
 //   --length  metres of road to keep
 //
+// A LOOP (or any drive that uses several roads) is described by points to pass instead:
+//   node tools/build-map.mjs --id shimen-loop --name "Shimen Coast Loop" --loop \
+//        --via "25.23838,121.63071;25.27761,121.61687;25.26420,121.61130;25.24380,121.62250"
+//   --via     latitude,longitude points the drive must pass, in order, separated by ";"
+//             (the drive between two points is the shortest one — see tools/osm-route.mjs)
+//   --loop    after the last point, drive back to the first: a road with no ends
+//
 // It downloads 1. the road centre line from OpenStreetMap (Overpass API) and
 // 2. satellite-derived elevation from the public "Terrarium" terrain tiles, then
 // writes public/content/maps/<id>/map.json + height.bin and lists the id in
@@ -21,6 +28,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
+import { findRoute } from './osm-route.mjs';
 
 // ---- Settings (command-line flags override these) ---------------------------
 const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filter(Boolean).map((part) => {
@@ -29,7 +37,9 @@ const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filt
 }));
 const MAP_ID = args.id || 'angeles-crest';
 const MAP_NAME = args.name || 'Angeles Crest Highway (CA-2)';
-const [startLat, startLon] = (args.start || '34.2230,-118.1906').split(',').map(Number);
+const VIA = args.via ? args.via.split(';').map((pair) => { const [lat, lon] = pair.split(',').map(Number); return { lat, lon }; }) : null;
+const IS_LOOP = 'loop' in args;
+const [startLat, startLon] = VIA ? [VIA[0].lat, VIA[0].lon] : (args.start || '34.2230,-118.1906').split(',').map(Number);
 const ROUTE_START = { lat: startLat, lon: startLon };       // where the drive begins
 const ROUTE_LENGTH_M = Number(args.length || 9700);          // about 6 miles
 const ROAD_FILTER = args.road ? `["name"="${args.road}"]` : `["ref"~"${args.ref || 'CA 2'}"]`;
@@ -38,6 +48,8 @@ const SEARCH_BOX = [startLat - BOX_KM / 111, startLon - BOX_KM / 90, startLat + 
 const TILE_ZOOM = 14;                                 // ~8 m per pixel here
 const GRID_CELL_M = 10;                               // heightmap resolution we save
 const MARGIN_M = 1600;                                // terrain kept around the road
+const SEA_SURFACE_M = 0.3;                            // elevation data shows open water as 0 m: anything below this is sea
+const SEA_FLOOR_M = -3;                               // ...and is given this depth, so the game's sheet of water covers it
 const OUT_DIR = path.resolve('public/content/maps', MAP_ID);
 const CACHE_DIR = path.resolve('tools/.cache');
 
@@ -156,7 +168,10 @@ async function heightAt(lat, lon) {
 }
 
 // ---- Main -------------------------------------------------------------------
-const road = await loadRoad();
+// Either a drive through several roads (--via, see osm-route.mjs) or one named road.
+const route = VIA ? await findRoute({ via: VIA, loop: IS_LOOP, toLocal, fetchCached, cacheName: `osm-roads-${MAP_ID}.json` }) : null;
+const road = route ? route.road : await loadRoad();
+if (route) console.log(`Route: ${road.length} points, ${(route.length / 1000).toFixed(2)} km${IS_LOOP ? ' (a loop)' : ''}, ${route.sections.length} stretches, ${route.signals.length} traffic lights`);
 
 let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
 for (const p of road) {
@@ -170,16 +185,36 @@ const rows = Math.ceil((maxZ + MARGIN_M - z0) / GRID_CELL_M) + 1;
 console.log(`Heightmap: ${cols} x ${rows} cells of ${GRID_CELL_M} m`);
 
 const heights = new Float32Array(cols * rows);
-let minH = Infinity, maxH = -Infinity;
+let minH = Infinity, maxH = -Infinity, seaCells = 0;
 for (let r = 0; r < rows; r++) {
   for (let c = 0; c < cols; c++) {
     const { lat, lon } = toLatLon(x0 + c * GRID_CELL_M, z0 + r * GRID_CELL_M);
-    const h = await heightAt(lat, lon);
+    // The elevation data shows the sea as flat ground at 0 m (with the odd wild value thousands of
+    // metres down). The game only needs "this is water", so every such cell becomes a shallow sea bed.
+    let h = await heightAt(lat, lon);
+    if (h < SEA_SURFACE_M) { h = SEA_FLOOR_M; seaCells++; }
     heights[r * cols + c] = h;
     minH = Math.min(minH, h); maxH = Math.max(maxH, h);
   }
 }
 console.log(`Elevation range: ${minH.toFixed(0)} m .. ${maxH.toFixed(0)} m  (${tiles.size} tiles)`);
+
+// Soften the shore. "Sea or land" was decided cell by cell, which leaves a coast made of 10 m
+// squares with a 3 m step. Averaging each low cell (sea, beach) with its neighbours a few times
+// turns that into a rounded shoreline with a beach that slopes into the water.
+const SHORE_TOP_M = 5;                                // only ground lower than this is touched
+for (let pass = 0; pass < 3 && seaCells > 0; pass++) {
+  const before = heights.slice();
+  for (let r = 1; r < rows - 1; r++) {
+    for (let c = 1; c < cols - 1; c++) {
+      const i = r * cols + c;
+      if (before[i] > SHORE_TOP_M) continue;
+      let sum = 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) sum += before[i + dr * cols + dc];
+      heights[i] = sum / 9;
+    }
+  }
+}
 
 // Store heights as 16-bit integers (0.1 m steps above the lowest point).
 const packed = new Uint16Array(cols * rows);
@@ -189,15 +224,21 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(path.join(OUT_DIR, 'height.bin'), Buffer.from(packed.buffer));
 
 // Keep hand-edited lists from an existing map.json; otherwise start with sensible defaults.
+// (A section keeps a hand-written "type" — the kind of road — if it still starts at the same place.)
+const keepType = (section) => {
+  const before = (old.sections || []).find((o) => o.from === section.from && o.type);
+  return before ? { ...section, type: before.type } : section;
+};
 const mapFile = path.join(OUT_DIR, 'map.json');
 const old = fs.existsSync(mapFile) ? JSON.parse(fs.readFileSync(mapFile)) : {};
-const total = (road.length - 1) && ROUTE_LENGTH_M;
+const total = route ? route.length : ROUTE_LENGTH_M;
 const map = {
   id: MAP_ID,
   name: MAP_NAME,
   source: 'Road: © OpenStreetMap contributors (ODbL). Elevation: Mapzen/AWS Terrain Tiles (USGS 3DEP, SRTM).',
   origin: ROUTE_START,
   heightmap: { file: 'height.bin', x0, z0, cell: GRID_CELL_M, cols, rows, minHeight: minH, step: 0.1 },
+  ...(seaCells > cols * rows * 0.005 ? { sea: true } : {}),   // a real stretch of water on the map: the game draws a sea
   pois: old.pois || [
     { id: 'gas-start', type: 'gas', name: 'Roadside Fuel', s: 420, length: 90, depth: 34 },
     { id: 'turnout-mid', type: 'turnout', name: 'Vista Turnout', s: Math.round(total * 0.5), length: 80, depth: 20 },
@@ -210,6 +251,12 @@ const map = {
   ],
   ...(old.poles ? { poles: old.poles } : {}),
   startPoi: old.startPoi || (old.pois ? old.pois[0].id : 'gas-start'),
+  // Hand-edited settings the game reads (ground, traffic, single objects, the city glow) are kept too.
+  ...Object.fromEntries(['traffic', 'ground', 'objects', 'cityLights'].filter((key) => old[key]).map((key) => [key, old[key]])),
+  // A drive through several roads also records how it was made and what the real map says about it:
+  // "sections" = road name, lanes and speed limit of each stretch, "signals" = traffic lights
+  // (both in metres from the start, measured along "road").
+  ...(route ? { via: VIA.map((p) => [p.lat, p.lon]), ...(IS_LOOP ? { loop: true } : {}), sections: route.sections.map(keepType), signals: route.signals } : {}),
 };
 // The long list of road points goes last, on one line, so the top of the file stays readable.
 const text = JSON.stringify(map, null, 2).replace(/\n}$/, ',\n  "road": ' + JSON.stringify(road.map((p) => [Math.round(p.x * 10) / 10, Math.round(p.z * 10) / 10])) + '\n}');

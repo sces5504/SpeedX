@@ -1,4 +1,162 @@
 {
-  "note": "Reusable scenery models. None are installed: the game uses its built-in shapes. To add one, put public/content/props/<id>/model.glb and list it under \"props\" as  \"<id>\": { \"height\": <metres>, \"detail\": <texture pixels kept, default 48> }.",
+  "note": "The shared library: everything a map can be built from. \"builtIn\" things are made by the game's code (src/world/library.js) and need no files; each has \"about\" (what it is), \"options\" (what a map may set) and, for stops, \"does\" (what the player can do there). \"props\" are model files: put public/content/props/<id>/model.glb and list it as  \"<id>\": { \"height\": <metres>, \"detail\": <texture pixels kept, default 48> }. A model with the same id as a built-in replaces it.",
+  "builtIn": {
+    "plants": {
+      "pine": {
+        "about": "Conifer, 9 m tall."
+      },
+      "bush": {
+        "about": "Chaparral scrub, 1.5 m."
+      },
+      "grass": {
+        "about": "Tuft of dry grass, 0.75 m. Plant it close to the road (\"minDist\": 0.4)."
+      },
+      "rock": {
+        "about": "Boulder, 1.5 m across."
+      },
+      "casuarina": {
+        "about": "Taiwan's north coast. Tall wispy windbreak tree of the shore (木麻黃), 11.5 m."
+      },
+      "broadleaf": {
+        "about": "Taiwan's north coast. Round-crowned evergreen of the wet hills (相思樹, 榕), 8 m. Plant many for forest."
+      },
+      "pandanus": {
+        "about": "Taiwan's north coast. Clump of long sword leaves by the sea (林投), 2.7 m."
+      },
+      "silvergrass": {
+        "about": "Taiwan's north coast. Tall grass with pale plumes (芒草), 2.4 m. Plant it close to the road (\"minDist\": 0.6)."
+      }
+    },
+    "buildings": {
+      "house": { "about": "Narrow Taiwanese townhouse of 2-5 floors with balconies (透天厝); a wide plot becomes a terrace of several." },
+      "shack": { "about": "Single-storey sheet-metal building (鐵皮屋)." },
+      "cafe": { "about": "Shack with warm windows, a string of bulbs and a neon sign (\"sign\": \"咖啡\", \"COFFEE\", \"BAR\")." },
+      "eatery": { "about": "Small restaurant with a tube-lit glass front under a yellow sign." },
+      "seafood": { "about": "Live-seafood restaurant: open tube-lit front, aqua fish tanks, big red sign and a tall sign by the road (活海產)." },
+      "police": { "about": "Police station with its red lamp (派出所)." },
+      "temple": { "about": "Small roadside temple with red lanterns." },
+      "hall": { "about": "Plain public building (activity centre, visitor centre)." },
+      "toilet": { "about": "Public toilet block with one tube light." },
+      "bus-stop": { "about": "Bus shelter with a bench, one tube light and the stop sign." },
+      "power-tower": { "about": "High-voltage lattice pylon, 42 m, with a red light on top." },
+      "surf-base": { "about": "LANDMARK. Zhongjiao Bay surf centre (中角灣衝浪基地): white stepped building with a blue wave mural, its crest a neon tube." },
+      "shrine": { "about": "LANDMARK. The stone sea-wall temple at Caoli (草里水流公廟): red doors, swallowtail ridge with glazed ornaments, lanterns." },
+      "columbarium": { "about": "LANDMARK. White domed memorial hall of the hillside cemetery above Jinshan (after 金寶山日光苑): arcades, three domes, warm wall-wash." },
+      "police-post": { "about": "LANDMARK. Zhongjiao police station (中角派出所): white cubes with blue trim and a small domed tower, red lamp, blue neon along the roofs." },
+      "harbour": { "about": "LANDMARK. Caoli fishing harbour (草里漁港): quay with white railings and a pavilion, breakwater with red and green beacons, five boats under work lamps. Place it with \"at\" on the shoreline." },
+      "road-lamp": { "about": "Tall road lamp with a sodium-orange head (\"color\" changes it). Put a row of them along a stretch with \"roadside\"." },
+      "utility-pole": { "about": "Concrete utility pole with a cross-arm; some carry a transformer. Use with \"roadside\"." }
+    },
+    "objects": {
+      "gas-canopy": {
+        "about": "Roof over two pump islands, 8.6 x 13.6 m, lit with neon: brand-colour tubes round the roof, accent tubes, and a tinted light underneath. You can refuel under it.",
+        "options": [
+          "color",
+          "accent",
+          "light",
+          "name"
+        ]
+      },
+      "store": {
+        "about": "Shop with a lit window, 8 x 18 m, neon signs and a line of neon along the roof.",
+        "options": [
+          "color",
+          "accent",
+          "name",
+          "mart"
+        ]
+      },
+      "price-sign": {
+        "about": "10 m fuel price sign in a frame of neon, readable from both directions.",
+        "options": [
+          "color",
+          "name"
+        ]
+      },
+      "street-lamp": {
+        "about": "8 m lamp with its arm toward the road and a real light.",
+        "options": [
+          "color"
+        ]
+      },
+      "vending-machine": {
+        "about": "Drinks machine with a lit front.",
+        "options": [
+          "color"
+        ]
+      },
+      "info-board": {
+        "about": "Wooden sign for a turnout.",
+        "options": [
+          "name"
+        ]
+      },
+      "barrier": {
+        "about": "Concrete barrier, 2.8 m long."
+      },
+      "cone": {
+        "about": "Traffic cone with a reflective collar."
+      }
+    },
+    "grounds": {
+      "chaparral": {
+        "about": "Dry Californian hills: olive-brown brush, pale rock on steep slopes."
+      },
+      "north-coast": {
+        "about": "Taiwan's north coast: wet green hills, dark volcanic rock on steep slopes, grey-brown sand in the lowest few metres beside the sea."
+      }
+    },
+    "stops": {
+      "gas": {
+        "about": "Gas station: neon-lit canopy with pumps, store, price sign, two sodium lamps, parking bays.",
+        "options": [
+          "color",
+          "accent",
+          "light",
+          "sign"
+        ],
+        "does": [
+          "travel",
+          "fuel",
+          "time-attack",
+          "parking"
+        ]
+      },
+      "mart": {
+        "about": "Mini-mart: like the gas station, with a 24H store and vending machines.",
+        "options": [
+          "color",
+          "accent",
+          "light",
+          "sign"
+        ],
+        "does": [
+          "travel",
+          "fuel",
+          "time-attack",
+          "parking"
+        ]
+      },
+      "turnout": {
+        "about": "Gravel pull-off: one sodium lamp, an info board, room for racers to park.",
+        "does": [
+          "travel",
+          "time-attack",
+          "parking"
+        ]
+      }
+    },
+    "does": {
+      "travel": "Fast-travel point: open the map (M) and click it to be put there.",
+      "fuel": "Press E under the canopy to fill the tank.",
+      "time-attack": "Press E at the cone to start a timed run in the direction you are facing.",
+      "parking": "Parked cars stand here; they are solid."
+    },
+    "traffic": {
+      "two-lane": {
+        "about": "Right-hand traffic that follows the map: drivers keep to their lane and to the speed limit of the stretch they are on (a section's \"speedKmh\"), follow, yield when pushed, and stop at the map's traffic lights (\"signals\"). Where the road has two lanes each way they keep right and pass on the left. Recycled out of sight."
+      }
+    }
+  },
   "props": {}
 }

@@ -33,8 +33,10 @@
     "x": 0.56,
     "y": 0.8,
     "w": 0.52,
-    "h": 0.11
+    "h": 0.11,
+    "garnish": "red"
   },
+  "interior": { "seats": "#4d5a70", "dash": "#2b3038", "carpet": "#1a1e26", "accent": "#9fb6dc" },
   "driverSide": 1,
   "gaugeColor": "#ff9a3a",
   "mass": 1220,

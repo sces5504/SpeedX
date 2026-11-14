@@ -70,9 +70,9 @@ export function collideWithRoadEdges(body, map) {
       const sign = proj.d > 0 ? -1 : 1;                     // push back toward the centre line
       nx = -road.tz[i] * sign; nz = road.tx[i] * sign;
     }
-    const endMargin = 9;                                    // "road closed" barriers at both ends
-    if (proj.s < endMargin && endMargin - proj.s > depth) { depth = endMargin - proj.s; nx = road.tx[i]; nz = road.tz[i]; }
-    if (proj.s > road.length - endMargin && proj.s - (road.length - endMargin) > depth) {
+    const endMargin = 9;                                    // "road closed" barriers at both ends (a loop has none)
+    if (!road.closed && proj.s < endMargin && endMargin - proj.s > depth) { depth = endMargin - proj.s; nx = road.tx[i]; nz = road.tz[i]; }
+    if (!road.closed && proj.s > road.length - endMargin && proj.s - (road.length - endMargin) > depth) {
       depth = proj.s - (road.length - endMargin); nx = -road.tx[i]; nz = -road.tz[i];
     }
     if (depth > (hit ? hit.depth : 0)) hit = { depth, nx, nz, x: c.x, z: c.z };

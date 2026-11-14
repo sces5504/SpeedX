@@ -84,12 +84,13 @@ export function createPlayer(scene, map, carId, colorIndex, mirrorTexture) {
     const i = Math.min(proj.index, road.count - 2);
     // Slopes are blended between road samples, otherwise the car would twitch every 2 metres.
     const grade = (map.at(road.y, proj.s + 1.5) - map.at(road.y, proj.s - 1.5)) / 3;   // rise per metre along the road
-    const bank = Math.abs(proj.d) < ROAD.paveHalfWidth ? map.at(road.bank, proj.s) : 0;
+    const half = map.at(road.half, proj.s);                          // centre line to the edge of the asphalt, here
+    const bank = Math.abs(proj.d) < half ? map.at(road.bank, proj.s) : 0;
     const fx = -Math.sin(vehicle.yaw), fz = -Math.cos(vehicle.yaw);
     const along = fx * road.tx[i] + fz * road.tz[i];                // 1 = driving up the road, -1 = down
     const across = -fx * road.tz[i] + fz * road.tx[i];
     const lot = (proj.d > 0 ? road.railR[i] : road.railL[i]) === 2; // parking lots are paved
-    player.onGravel = Math.abs(proj.d) > ROAD.paveHalfWidth && !lot;
+    player.onGravel = Math.abs(proj.d) > half && !lot;
     return {
       grip: weatherGrip * (player.onGravel ? PHYSICS.gravelGrip : 1),
       extraDrag: player.onGravel ? 0.03 : 0,

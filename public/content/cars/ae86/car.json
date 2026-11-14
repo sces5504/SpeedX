@@ -31,12 +31,15 @@
     "h": 0.13,
     "popup": true
   },
+  "moulding": true,
   "taillights": {
     "x": 0.56,
     "y": 0.78,
     "w": 0.5,
-    "h": 0.12
+    "h": 0.12,
+    "garnish": "black"
   },
+  "interior": { "seats": "#7a5238", "dash": "#3b2a20", "carpet": "#2a1c14", "accent": "#d9a25e" },
   "driverSide": 1,
   "gaugeColor": "#ffb347",
   "mass": 940,

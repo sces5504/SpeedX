@@ -34,8 +34,11 @@
     "x": 0.5,
     "y": 0.8,
     "w": 0.62,
-    "h": 0.1
+    "h": 0.1,
+    "style": "round",
+    "garnish": "black"
   },
+  "interior": { "seats": "#8a1a1c", "dash": "#1d1d20", "carpet": "#161012", "accent": "#e23a30" },
   "driverSide": 1,
   "gaugeColor": "#ffffff",
   "spoiler": 0.98,

@@ -1,13 +1,13 @@
 // ---------------------------------------------------------------------------
-// props.js — reusable 3D objects for building worlds: trees, rocks, street
-// lights, utility poles, buildings, barriers, cones...
+// props.js — loads the MODEL FILES of the shared library: 3D models of trees,
+// rocks, poles, buildings... (The library also has built-in things made by
+// code; library.js lists both kinds and is what the map builders ask.)
 //
 // A prop is a folder  public/content/props/<id>/model.glb  listed in
 // public/content/props/index.json with its real height in metres. At load time
 // each model is merged into one mesh, stood on the ground, centred, and scaled
-// to that height, so map code can just say  placeProp('streetlight', x, y, z).
-// If a prop is missing the caller falls back to a simple built-in shape, so
-// deleting a prop folder never breaks a map.
+// to that height. If a prop is missing, the built-in thing of the same name is
+// used, so deleting a prop folder never breaks a map.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
