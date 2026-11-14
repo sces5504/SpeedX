@@ -21,13 +21,17 @@ export const ROAD = {
 // which kind: world/mapData.js picks one from what the real map says about that stretch, or a
 // section can name one itself with "type". A map without sections is 'two-lane' all the way.
 //   lanes     lanes in EACH direction          laneWidth  metres
-//   shoulder  paved strip outside the lanes    median     half the width of the painted strip between the two directions
+//   shoulder  paved strip outside the lanes    median     half the width of the strip between the two directions
+//   wall      true = a concrete wall stands on the median (no crossing), with an opening `openLength` metres
+//             long every `openEvery` metres and at every traffic light, so the player can turn round
+//   centreLine  false = no line down the middle (a road too narrow for one)
 // Everything further out (gravel, guardrail, flat verge) keeps the distances from the edge of the
 // asphalt that ROAD above gives it.
 export const ROAD_TYPES = {
   'two-lane': { lanes: 1, laneWidth: ROAD.laneWidth, shoulder: ROAD.paveHalfWidth - ROAD.laneWidth, median: 0 },   // the standard mountain road
-  'divided': { lanes: 2, laneWidth: 3.6, shoulder: 1.5, median: 0.8 },      // four lanes with a median (Taiwan's Highway 2)
-  'narrow': { lanes: 1, laneWidth: 3.2, shoulder: 0.5, median: 0 },         // a small country road
+  'divided': { lanes: 2, laneWidth: 3.5, shoulder: 1.3, median: 0.9, wall: true, openEvery: 400, openLength: 26 },   // four lanes either side of a concrete wall (Taiwan's Highway 2)
+  'country': { lanes: 1, laneWidth: 3.4, shoulder: 0.5, median: 0 },        // an ordinary two-lane local road with a double yellow line
+  'narrow': { lanes: 1, laneWidth: 2.9, shoulder: 0.3, median: 0, centreLine: false },   // a hill road with white edge lines only
 };
 
 // How big each kind of building is unless a map says otherwise: [width along the road, depth], in metres.
@@ -35,7 +39,7 @@ export const ROAD_TYPES = {
 export const BUILDING_SIZES = {
   house: [10.4, 11], shack: [8, 7], cafe: [8, 7], eatery: [9, 8], seafood: [14, 10], police: [12, 9], temple: [6, 5], hall: [14, 10], toilet: [5, 4],
   'surf-base': [18, 11], shrine: [7, 6], columbarium: [30, 18], 'police-post': [14, 9], harbour: [60, 40],
-  'bus-stop': [4, 2], 'power-tower': [9, 9], 'road-lamp': [0.5, 0.5], 'utility-pole': [0.5, 0.5],
+  'bus-stop': [4, 2], 'power-tower': [9, 9], 'road-lamp': [0.5, 0.5], 'utility-pole': [0.5, 0.5], 'median-lamp': [0.5, 5],
 };
 
 export const GRAPHICS = {
@@ -58,6 +62,8 @@ export const GRAPHICS = {
   dampRoad: 0.4,          // the asphalt always looks a little damp, like a film set, so lights reflect in it
                           // (looks only: grip is not affected). 0 = bone dry unless it rains
   mist: 0.2,              // how visible light beams are in dry air (rain adds more)
+  realLamps: 8,           // how many street lamps and shop lights near you are REAL lights at once (each one costs a little speed)
+  lightPools: false,      // true = also paint a soft pool of colour on the ground under signs and lamps (a cheap fake; real lamps make it unnecessary)
   buildingLights: 0.8,    // brightness of shop signs, canopy lights, neon and street lamps (1 = full)
   carReflections: 128,    // size of the live reflection on car paint and glass; 0 = off
   fovChase: 58,

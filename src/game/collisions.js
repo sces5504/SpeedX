@@ -22,7 +22,7 @@ const WALL_FRICTION = 0.32;    // how much scraping along a wall slows you
 const CAR_BOUNCE = 0.12;
 const CAR_FRICTION = 0.25;
 
-const proj = {};
+const proj = {}, middle = {};
 
 // Corners of a body in world space: front-left, front-right, rear-left, rear-right.
 function corners(body) {
@@ -69,6 +69,13 @@ export function collideWithRoadEdges(body, map) {
       depth = Math.abs(proj.d) - limit;
       const sign = proj.d > 0 ? -1 : 1;                     // push back toward the centre line
       nx = -road.tz[i] * sign; nz = road.tx[i] * sign;
+    }
+    // The concrete wall down the middle of a divided road: a corner inside it is pushed back out to the
+    // side the car's middle is on.
+    if (road.wall[i] === 1 && Math.abs(proj.d) < 0.42 && 0.42 - Math.abs(proj.d) > depth) {
+      map.project(body.x, body.z, hint, middle);
+      const side = middle.d >= 0 ? 1 : -1;
+      depth = 0.42 - Math.abs(proj.d) * (Math.sign(proj.d) === side ? 1 : -1); nx = -road.tz[i] * side; nz = road.tx[i] * side;
     }
     const endMargin = 9;                                    // "road closed" barriers at both ends (a loop has none)
     if (!road.closed && proj.s < endMargin && endMargin - proj.s > depth) { depth = endMargin - proj.s; nx = road.tx[i]; nz = road.tz[i]; }

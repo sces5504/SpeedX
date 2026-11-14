@@ -293,6 +293,15 @@ export function makeGroundTexture() {
   });
 }
 
+// Diagonal warning stripes in two colours (road-closed barriers, the ends of a median wall).
+export function makeStripeTexture(background, stripe) {
+  return canvasTexture(128, 32, (g, w, h) => {
+    g.fillStyle = background; g.fillRect(0, 0, w, h);
+    g.fillStyle = stripe;
+    for (let x = -h; x < w; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.lineTo(x + h + 16, 0); g.lineTo(x + 16, h); g.fill(); }
+  });
+}
+
 // A bumpy normal map made from random noise (gives asphalt its sparkle).
 export function makeNoiseNormalMap(size = 256, strength = 2.0, seed = 3) {
   const rnd = makeRandom(seed);

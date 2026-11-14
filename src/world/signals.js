@@ -4,7 +4,7 @@
 //
 // Each light is a mast on the right of each direction of travel with an arm
 // over the lanes and a row of three lamps (red on the left, as in Taiwan), and
-// a white stop line painted across those lanes a few metres before it.
+// a white stop line and a zebra crossing painted across those lanes before it.
 //
 // A light runs green -> yellow -> red on a fixed cycle; lights further up the
 // road start a little later, so traffic moving at the limit meets a "green
@@ -13,8 +13,9 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { GRAPHICS } from '../config.js';
-import { enhanceMaterial } from '../render/materials.js';
+import { canvasTexture, enhanceMaterial } from '../render/materials.js';
 import { drawNear } from '../render/drawDistance.js';
+import { roadPaint } from './road.js';
 
 const GREEN_S = 24, YELLOW_S = 3, RED_S = 13;                  // seconds each colour lasts
 const CYCLE_S = GREEN_S + YELLOW_S + RED_S;
@@ -28,8 +29,10 @@ export function buildSignals(map) {
   group.name = 'signals';
   const steel = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x8d9296, roughness: 0.6, metalness: 0.5 }), { limit: 0.5 });
   const housing = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.7 });
-  const paint = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0xd8d8d2, roughness: 0.55 }), { retro: 0.55, wet: true, limit: 1.1 });
-  paint.polygonOffset = true; paint.polygonOffsetFactor = -2; paint.polygonOffsetUnits = -2;
+  const paint = roadPaint(0xd8d8d2);
+  // Zebra stripes: a picture of white bars, repeated across the road.
+  const stripes = roadPaint(0xd8d8d2, { alphaTest: 0.5, map: canvasTexture(32, 8, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(0, 0, w / 2, h); }) });
+  stripes.map.repeat.set(9, 1);
   const lights = [], heads = [];
   const p = {};
   const box = (w, h, d, material, x, y, z) => { const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material); mesh.position.set(x, y, z); return mesh; };
@@ -61,6 +64,12 @@ export function buildSignals(map) {
       line.position.set(p.x, p.y + 0.015, p.z);
       line.receiveShadow = true;
       one.add(line);
+      // ...and a zebra crossing between the stop line and the mast.
+      map.pointAt(signal.s - dir * (STOP_LINE_M - 3.2), dir * (road.median[i] + lanesWide / 2), p);
+      const zebra = new THREE.Mesh(new THREE.PlaneGeometry(lanesWide, 3.2), stripes);
+      zebra.rotation.set(-Math.PI / 2, p.yaw, 0, 'YXZ');
+      zebra.position.set(p.x, p.y + 0.014, p.z);
+      one.add(zebra);
     }
     heads.push({ signal, lamps, offset: (signal.s / 14 + number * 3) % CYCLE_S });     // 14 m/s: the green wave
     group.add(drawNear(one));

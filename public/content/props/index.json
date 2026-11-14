@@ -23,6 +23,9 @@
       "pandanus": {
         "about": "Taiwan's north coast. Clump of long sword leaves by the sea (林投), 2.7 m."
       },
+      "shrub": {
+        "about": "Taiwan's north coast. Low green scrub that covers the windy slopes above the coast road, 1.7 m. Plant it densely."
+      },
       "silvergrass": {
         "about": "Taiwan's north coast. Tall grass with pale plumes (芒草), 2.4 m. Plant it close to the road (\"minDist\": 0.6)."
       }
@@ -44,6 +47,7 @@
       "columbarium": { "about": "LANDMARK. White domed memorial hall of the hillside cemetery above Jinshan (after 金寶山日光苑): arcades, three domes, warm wall-wash." },
       "police-post": { "about": "LANDMARK. Zhongjiao police station (中角派出所): white cubes with blue trim and a small domed tower, red lamp, blue neon along the roofs." },
       "harbour": { "about": "LANDMARK. Caoli fishing harbour (草里漁港): quay with white railings and a pavilion, breakwater with red and green beacons, five boats under work lamps. Place it with \"at\" on the shoreline." },
+      "median-lamp": { "about": "The two-armed sodium lamp that stands on the median wall of a divided highway. Use with \"roadside\" and \"side\": 0." },
       "road-lamp": { "about": "Tall road lamp with a sodium-orange head (\"color\" changes it). Put a row of them along a stretch with \"roadside\"." },
       "utility-pole": { "about": "Concrete utility pole with a cross-arm; some carry a transformer. Use with \"roadside\"." }
     },

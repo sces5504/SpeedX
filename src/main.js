@@ -94,7 +94,7 @@ const mapView = createMapView(map, (poi) => travelTo(poi));
 // A few real lights are shared between all lamps and AI cars: each frame they
 // jump to whichever lamps/cars are closest to you. (Hundreds of real lights
 // would be far too slow; the rest are just glowing surfaces.)
-const lampLights = Array.from({ length: 4 }, () => { const l = new THREE.PointLight(0xffffff, 0, 50, 1.8); scene.add(l); return l; });
+const lampLights = Array.from({ length: GRAPHICS.realLamps }, () => { const l = new THREE.PointLight(0xffffff, 0, 50, 1.8); scene.add(l); return l; });
 const cookie = makeHeadlightCookie();
 const trafficBeams = Array.from({ length: 3 }, () => {
   const l = new THREE.SpotLight(0xfff1dc, 0, 90, 0.6, 0.6, 1.0);

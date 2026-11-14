@@ -8,6 +8,7 @@
 //   broadleaf    a round-crowned evergreen of the wet hills (相思樹, 榕)
 //   pandanus     a clump of long sword leaves by the sea (林投)
 //   silvergrass  tall grass with pale plumes that catch the headlights (芒草)
+//   shrub        the low green scrub that covers the windy coastal slopes
 // They are made of flat "cards" — upright sheets with a picture of a bough or
 // a clump of twigs on them, see-through between the needles. A few dozen cards
 // at different angles read as a full plant from any side, and are cheap enough
@@ -37,6 +38,7 @@ export const PLANTS = {
   broadleaf: () => [{ geometry: canopy(61), material: cardMaterial(leafTexture()) }, { geometry: limbs(67), material: plain(0x2c2620) }],
   pandanus: () => [{ geometry: crossedCards(5, 3.4, 2.7, 71), material: cardMaterial(swordLeafTexture()) }],
   silvergrass: () => [{ geometry: crossedCards(4, 2.3, 2.4, 81), material: cardMaterial(plumeTexture()) }],
+  shrub: () => [{ geometry: crossedCards(5, 2.6, 1.7, 87), material: cardMaterial(shrubTexture()) }],
 };
 
 // ---- Shapes ------------------------------------------------------------------------
@@ -261,6 +263,21 @@ function plumeTexture() {
         const t = rnd(), sx = tx + lean * 0.004 * n, sy = ty + 34 * t;
         g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + (rnd() - 0.5) * 20 * (0.4 + t), sy - 6 - rnd() * 16); g.stroke();
       }
+    }
+  }, { repeat: false });
+}
+
+// Low coastal scrub: a rounded mound of small glossy leaves, darker underneath.
+function shrubTexture() {
+  return canvasTexture(256, 256, (g, w, h) => {
+    const rnd = makeRandom(89);
+    g.clearRect(0, 0, w, h);
+    for (let k = 0; k < 1500; k++) {
+      const angle = Math.PI + rnd() * Math.PI, far = Math.sqrt(rnd());
+      const x = w / 2 + Math.cos(angle) * far * w * 0.46, y = h - 6 + Math.sin(angle) * far * h * 0.78;
+      const top = 1 - y / h;
+      g.fillStyle = `hsl(${88 + rnd() * 34}, ${26 + rnd() * 20}%, ${6 + top * 12 + rnd() * 7}%)`;
+      g.beginPath(); g.ellipse(x, y, 4 + rnd() * 5, 2.4 + rnd() * 2.6, rnd() * 3, 0, 7); g.fill();
     }
   }, { repeat: false });
 }

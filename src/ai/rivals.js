@@ -69,9 +69,6 @@ export function createRivals(scene, map, playerCarId) {
   const race = { state: 'none', rival: null, timer: 0, cooldown: 8, startS: 0, finishS: 0, dir: 1, length: 0,
     playerWon: false, message: '', wins: 0, losses: 0, playerProgress: 0, rivalProgress: 0 };
 
-  // Is s within `margin` metres of an end of the road? (Never, on a loop.)
-  const nearAnEnd = (s, margin) => Math.min(map.roomAhead(s, 1), map.roomAhead(s, -1)) < margin;
-
   function spawn(ai, playerInfo, everyone, anywhere) {
     for (let attempt = 0; attempt < 12; attempt++) {
       // Rivals usually appear behind you and catch up — that is how they find you.
@@ -79,7 +76,7 @@ export function createRivals(scene, map, playerCarId) {
       const distance = anywhere ? 150 + Math.random() * 350 : GAMEPLAY.spawnDistance - 100 + Math.random() * 120;
       const dir = anywhere ? (Math.random() < 0.5 ? 1 : -1) : (behind ? playerInfo.dir : (Math.random() < 0.5 ? 1 : -1));
       const s = map.wrap(playerInfo.s + (behind ? -1 : 1) * distance * playerInfo.dir);
-      if (nearAnEnd(s, 80)) continue;
+      if (map.nearEnd(s, 80)) continue;
       if (everyone.some((o) => o.active && o !== ai && o.dir === dir && Math.abs(map.ahead(o.s, s)) < 50)) continue;
       ai.skill = skillOf(Math.round(GAMEPLAY.rivalLevel + (Math.random() * 2 - 1) * GAMEPLAY.rivalLevelSpread));
       ai.agility = ai.skill.agility;
@@ -114,7 +111,7 @@ export function createRivals(scene, map, playerCarId) {
         if (!ai.active) { spawn(ai, playerInfo, everyone, false); continue; }
         const inRace = race.rival === ai && race.state !== 'none';
         const away = Math.abs(map.ahead(playerInfo.s, ai.s));
-        if (!inRace && (away > GAMEPLAY.despawnDistance + 150 || nearAnEnd(ai.s, 50))) { removeAi(ai); continue; }
+        if (!inRace && (away > GAMEPLAY.despawnDistance + 150 || map.nearEnd(ai.s, 50))) { removeAi(ai); continue; }
         const racing = inRace && race.state === 'racing';
         think(ai, dt, playerInfo, everyone, grip, racing);
         moveAi(ai, dt, map);

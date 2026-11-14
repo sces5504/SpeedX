@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { ROAD } from '../config.js';
-import { canvasTexture, enhanceMaterial } from '../render/materials.js';
+import { enhanceMaterial, makeStripeTexture } from '../render/materials.js';
 import { ROAD_GLARE } from './road.js';
 import { box, darkMetal } from './buildings.js';
 import { makeObject } from './library.js';
@@ -131,11 +131,7 @@ export function buildPois(map) {
   }
 
   // ---- Road closed barriers at both ends --------------------------------------
-  const stripes = canvasTexture(128, 32, (g, w, h) => {
-    g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#e2571a';
-    for (let x = -h; x < w; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.lineTo(x + h + 16, 0); g.lineTo(x + 16, h); g.fill(); }
-  });
+  const stripes = makeStripeTexture('#f2f2f2', '#e2571a');
   const stripeMat = enhanceMaterial(new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.5 }), { retro: 3 });
   for (const s of map.road.closed ? [] : [5, map.road.length - 5]) {            // (a loop has no ends to close)
     for (const d of [-4, 0, 4]) {

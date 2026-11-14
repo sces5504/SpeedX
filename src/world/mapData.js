@@ -14,6 +14,8 @@
 //             how the road is laid out there (see ROAD_TYPES in config.js): lanes each way,
 //             their width, half the painted median, centre line to the edge of the asphalt,
 //             and centre line to the guardrail. The road can change kind along the way.
+//   wall      1 where a concrete wall stands on the median, 2 where that wall has an opening to cross by, 0 = no wall
+//   centreLine  1 where a centre line is painted
 //   limit     the speed limit there, in metres per second (a section's "speedKmh", or the map's own)
 // map.signals lists the traffic lights: { s, index, state } — state is 'green', 'yellow' or 'red'
 // and is kept up to date by world/signals.js; the AI drivers read it.
@@ -26,6 +28,7 @@
 //   map.wrap(s)          put any s back on the road
 //   map.ahead(from, to)  metres from one position forward to another (negative = behind)
 //   map.roomAhead(s,dir) metres of road left before an end (endless on a loop)
+//   map.nearEnd(s, m)    is s within m metres of an end? (never, on a loop)
 //   map.indexAt(s)       the road sample nearest to s
 // and for "where is the middle of my lane here?":
 //   map.laneCentre(s, dir, lane)   d of a lane for someone driving dir (+1/-1); lane 0 is the one
@@ -95,7 +98,7 @@ export async function loadMap(mapId) {
   for (let i = 0; i < n; i++) road.bank[i] = clamp(gentleCurve[i] * 5.0, -0.05, 0.05);
 
   // ---- What kind of road is it where? (ROAD_TYPES in config.js) ------------------
-  road.lanes = new Uint8Array(n);
+  road.lanes = new Uint8Array(n); road.wall = new Uint8Array(n); road.centreLine = new Uint8Array(n);
   road.laneWidth = new Float32Array(n); road.median = new Float32Array(n); road.half = new Float32Array(n);
   road.limit = new Float32Array(n);
   const mapLimit = info.traffic?.speedLimit ?? GAMEPLAY.speedLimit;        // metres per second
@@ -104,6 +107,8 @@ export async function loadMap(mapId) {
       road.lanes[i] = type.lanes; road.laneWidth[i] = type.laneWidth; road.median[i] = type.median;
       road.half[i] = type.median + type.lanes * type.laneWidth + type.shoulder;
       road.limit[i] = limit;
+      const opening = type.openEvery && (i * ROAD.step) % type.openEvery < type.openLength;      // a gap left in the wall
+      road.wall[i] = !type.wall ? 0 : opening ? 2 : 1; road.centreLine[i] = type.centreLine === false ? 0 : 1;
     }
   };
   layRoad(0, n, ROAD_TYPES['two-lane']);
@@ -129,11 +134,20 @@ export async function loadMap(mapId) {
   road.benchL = road.half.map((half) => half + ROAD.bench - ROAD.paveHalfWidth);
   road.benchR = road.benchL.slice();
 
+  // ---- The road's name on each stretch (painted on the asphalt, as in Taiwan) ---------------
+  // A section's name starts with its route number: "2 淡金公路" is Provincial Highway 2 -> "台2線".
+  const routeNames = sections.map((section) => {
+    const ref = (section.name || '').split(' ')[0];
+    return { index: section.index, label: /^\d+$/.test(ref) ? `台${ref}線` : ref };
+  }).filter((entry) => entry.label);
+
   // ---- Traffic lights ("signals" in map.json: metres along the road, from the real map) ----
   const signals = (info.signals || []).map((metres) => {
     const index = sampleNear(road, pointAlong(info.road, metres));
     return { index, s: index * ROAD.step, state: 'green' };
   });
+  // A junction is always an opening in the median wall.
+  for (const signal of signals) for (let j = -8; j <= 8; j++) { const i = sampleIndex(signal.index + j); if (road.wall[i]) road.wall[i] = 2; }
 
   // ---- Sides of the road ----------------------------------------------------
   road.railL = new Uint8Array(n);
@@ -234,6 +248,26 @@ export async function loadMap(mapId) {
     }
   }
 
+  // ---- Woodland ("woods" in map.json: the outlines of the real forests, from the map) --------
+  // scenery.js asks this to plant trees where there really are trees ("where": "woods" / "open").
+  const woods = (info.woods || []).map((outline) => ({
+    outline,
+    minX: Math.min(...outline.map((p) => p[0])), maxX: Math.max(...outline.map((p) => p[0])),
+    minZ: Math.min(...outline.map((p) => p[1])), maxZ: Math.max(...outline.map((p) => p[1])),
+  }));
+  function inWoods(x, z) {
+    for (const wood of woods) {
+      if (x < wood.minX || x > wood.maxX || z < wood.minZ || z > wood.maxZ) continue;
+      let inside = false;                       // count how many edges a line from the point crosses: odd = inside
+      const o = wood.outline;
+      for (let i = 0, j = o.length - 1; i < o.length; j = i++) {
+        if ((o[i][1] > z) !== (o[j][1] > z) && x < ((o[j][0] - o[i][0]) * (z - o[i][1])) / (o[j][1] - o[i][1]) + o[i][0]) inside = !inside;
+      }
+      if (inside) return true;
+    }
+    return false;
+  }
+
   // ---- Fast "which road sample is near this point?" lookup --------------------
   const HASH = 40;
   const buckets = new Map();
@@ -299,6 +333,8 @@ export async function loadMap(mapId) {
     if (closed) return Infinity;
     return dir > 0 ? road.length - s : s;
   }
+  // Is s within `margin` metres of an end of the road? (Never, on a loop.)
+  const nearEnd = (s, margin) => Math.min(roomAhead(s, 1), roomAhead(s, -1)) < margin;
   const indexAt = (s) => sampleIndex(Math.round(s / ROAD.step));
 
   // World position for "s metres along, d metres right of centre".
@@ -327,11 +363,11 @@ export async function loadMap(mapId) {
   }
 
   return {
-    id: mapId, info, road, pois, buildings, signals,
+    id: mapId, info, road, pois, buildings, signals, routeNames,
     heightmap: hm, carved, seaLevel,
     terrainHeight: (x, z) => gridHeight(carved, x, z),
     project, pointAt, roadHeight, at,
-    wrap, ahead, roomAhead, indexAt, laneCentre,
+    wrap, ahead, roomAhead, nearEnd, indexAt, laneCentre, inWoods,
   };
 }
 

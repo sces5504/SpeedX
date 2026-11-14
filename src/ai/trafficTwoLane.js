@@ -36,9 +36,6 @@ export function createTwoLaneTraffic(scene, map, settings) {
     cars.push(ai);
   }
 
-  // Is s within `margin` metres of an end of the road? (Never, on a loop.)
-  const nearAnEnd = (s, margin) => Math.min(map.roomAhead(s, 1), map.roomAhead(s, -1)) < margin;
-
   // Put a car somewhere sensible relative to the player.
   function spawn(ai, playerS, everyone, anywhere) {
     for (let attempt = 0; attempt < 12; attempt++) {
@@ -46,7 +43,7 @@ export function createTwoLaneTraffic(scene, map, settings) {
         ? (Math.random() * 2 - 1) * GAMEPLAY.despawnDistance * 0.9
         : (Math.random() < 0.65 ? 1 : -1) * (GAMEPLAY.spawnDistance + Math.random() * 160);
       const s = map.wrap(playerS + offset);
-      if (nearAnEnd(s, 60) || Math.abs(offset) < 90) continue;
+      if (map.nearEnd(s, 60) || Math.abs(offset) < 90) continue;
       const dir = Math.random() < 0.5 ? 1 : -1;
       // Not on top of another car in the same lane.
       if (everyone.some((o) => o.active && o !== ai && o.dir === dir && Math.abs(map.ahead(o.s, s)) < 45)) continue;
@@ -73,7 +70,7 @@ export function createTwoLaneTraffic(scene, map, settings) {
         ai.honk = false;
         if (!ai.active) { spawn(ai, playerInfo.s, everyone, false); continue; }
         const fromPlayer = map.ahead(playerInfo.s, ai.s);
-        if (Math.abs(fromPlayer) > GAMEPLAY.despawnDistance || nearAnEnd(ai.s, 40)) { removeAi(ai); continue; }
+        if (Math.abs(fromPlayer) > GAMEPLAY.despawnDistance || map.nearEnd(ai.s, 40)) { removeAi(ai); continue; }
         think(ai, dt, playerInfo, everyone);
         moveAi(ai, dt, map);
       }

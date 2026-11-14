@@ -12,6 +12,7 @@
 //   hall         a plain public building (activity centre, visitor centre)
 //   toilet       a public toilet block
 //   bus-stop     a bus shelter with its sign     power-tower   a high-voltage pylon with a red light
+//   median-lamp  the two-armed lamp on the wall of a divided highway ("side": 0)
 //   road-lamp    a tall sodium-orange road lamp   utility-pole  a concrete pole, some with a transformer
 // and LANDMARKS, each modelled on one real place (from photographs of it):
 //   surf-base    Zhongjiao Bay surf centre: a white stepped building with a blue wave mural (中角灣衝浪基地)
@@ -275,6 +276,7 @@ const panel = (wide, high, x, y, z, color, cell = WHITE, turn = 0) =>
 const tube = (deep, high, wide, x, y, z, color) => paint(showCell(new THREE.BoxGeometry(deep, high, wide), [WHITE[0], WHITE[1], WHITE[0], WHITE[1]]).translate(x, y + high / 2, z), color);
 // Soft light: a halo standing in front of a sign, or (flat = true) a pool of colour lying on the ground.
 function halo(wide, high, x, y, z, color, flat = false, turn = 0) {
+  if (flat && !GRAPHICS.lightPools) return null;            // pools on the ground are off: real lamps light the ground instead
   const geometry = showCell(new THREE.PlaneGeometry(wide, high), GLOW);
   if (flat) geometry.rotateX(-Math.PI / 2).translate(x, y, z); else geometry.rotateY(-Math.PI / 2 + turn).translate(x, y, z);
   return paint(geometry, color);
@@ -489,6 +491,18 @@ function streetLamp(out, b) {
   out.lamps.push({ at: [-2.5, 8.3, 0], color, intensity: 260, distance: 46 });
 }
 
+// The lamp of a divided highway: one pole standing on the median wall with an arm and a lamp over each side.
+function medianLamp(out, b) {
+  const color = b.color ? new THREE.Color(b.color).getHex() : 0xffa040;
+  out.solid.push(block(0.2, 9.2, 0.2, 0, 0.85, 0, STEEL));
+  for (const x of [-1, 1]) {
+    out.solid.push(block(2.4, 0.12, 0.12, x * 1.2, 9.9, 0, STEEL), block(0.75, 0.14, 0.3, x * 2.3, 9.78, 0, DARK));
+    out.lit.push(tube(0.6, 0.06, 0.24, x * 2.3, 9.7, 0, tint(color, 3.0 * LEVEL)));
+    for (const turn of [0, Math.PI / 2]) out.glow.push(halo(3.2, 3.2, x * 2.3, 9.7, 0, tint(color, 0.45 * LEVEL), false, turn));
+  }
+  out.lamps.push({ at: [0, 9.2, 0], color, intensity: 300, distance: 50 });
+}
+
 // A concrete utility pole with a cross-arm; every few poles carry a grey transformer drum.
 function utilityPole(out, b, rnd) {
   out.solid.push(block(0.26, 10, 0.26, 0, 0, 0, CONCRETE), block(0.1, 0.1, 2.0, 0, 9.3, 0, DARK), block(0.1, 0.1, 1.4, 0, 8.5, 0, DARK));
@@ -664,7 +678,7 @@ function harbour(out, b, rnd) {
   }
 }
 
-const KINDS = { 'surf-base': surfBase, shrine, columbarium, 'police-post': policePost, harbour, house, shack, cafe, eatery, seafood, police, temple, hall, toilet, 'bus-stop': busStop, 'power-tower': powerTower, 'road-lamp': streetLamp, 'utility-pole': utilityPole };
+const KINDS = { 'surf-base': surfBase, shrine, columbarium, 'police-post': policePost, harbour, house, shack, cafe, eatery, seafood, police, temple, hall, toilet, 'bus-stop': busStop, 'power-tower': powerTower, 'road-lamp': streetLamp, 'median-lamp': medianLamp, 'utility-pole': utilityPole };
 export const BUILDING_KINDS = Object.keys(KINDS);
 
 // ---- Materials -----------------------------------------------------------------------------------
@@ -680,10 +694,19 @@ function townMaterials(signs) {
     wire: new THREE.LineBasicMaterial({ color: 0x23272b }),
   };
 }
+// The REAL light each kind of lit building throws on the ground in front of it: [colour, strength, reach in metres].
+// (main.js turns the nearest GRAPHICS.realLamps of all lamps into real lights; the rest become "small lights".)
+const FRONT_LAMP = {
+  cafe: [WARM, 90, 26], eatery: [TUBE, 110, 28], police: [TUBE, 90, 26], 'police-post': [TUBE, 100, 28], temple: [AMBER, 90, 24], shrine: [AMBER, 100, 26],
+  toilet: [TUBE, 60, 18], hall: [TUBE, 55, 22], 'bus-stop': [TUBE, 45, 14], 'surf-base': [AQUA, 120, 34], harbour: [TUBE, 150, 46],
+};
 // The pieces of ONE building, made by its kind's function.
 function piecesOf(b, number, atlas, sign) {
   const out = { wall: [], solid: [], lit: [], glow: [], wire: [], neons: [], lamps: [] };
   KINDS[b.kind](out, { ...b, look: sign?.look, cell: (tall) => atlas.cell(sign ? sign.key + (tall ? '|tall' : '') : '') }, makeRandom(1000 + number * 7));
+  out.glow = out.glow.filter(Boolean);                       // (a pool that is switched off comes back as nothing)
+  const lamp = FRONT_LAMP[b.kind];
+  if (lamp && !out.lamps.length) out.lamps.push({ at: [-3, 3, 0], color: sign?.look.glow && b.kind === 'cafe' ? sign.look.glow : lamp[0], intensity: lamp[1], distance: lamp[2] });
   return out;
 }
 
@@ -728,6 +751,7 @@ export function buildTown(map) {
   for (const run of map.info.roadside || []) {
     for (let s = run.from ?? 0; s < Math.min(run.to ?? Infinity, map.road.length); s += run.spacing) {
       const index = map.indexAt(s), side = run.side ?? 1;
+      if (side === 0) { if (map.road.wall[index] === 1) everything.push({ kind: run.kind, color: run.color, s, index, side: 1, front: 0, far: false }); continue; }   // "side": 0 = on the median wall
       if ((side > 0 ? map.road.railR : map.road.railL)[index] === 2) continue;
       everything.push({ kind: run.kind, color: run.color, s, index, side, front: map.road.barrier[index] + (run.out ?? 0.7), far: false });
     }

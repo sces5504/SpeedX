@@ -45,6 +45,8 @@ export function buildScenery(map) {
         const j = projected.index;
         if (Math.abs(projected.d) < Math.max(road.benchL[j], road.benchR[j]) + (kind.minDist ?? 1.5) - 0.5) continue;
         if (hidesABuilding(map, projected)) continue;
+        // "where": "woods" = only inside the real forests the map knows, "open" = only outside them.
+        if (kind.where && (kind.where === 'woods') !== map.inWoods(x, z)) continue;
         const scale = kind.minScale + rnd() * (kind.maxScale - kind.minScale);
         const y = map.terrainHeight(x, z);
         if (map.seaLevel !== null && y < map.seaLevel + 0.8) continue;      // nothing grows in the sea or on the wet sand

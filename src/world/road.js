@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { GRAPHICS, ROAD } from '../config.js';
-import { enhanceMaterial, makeAsphaltTexture, makeNoiseNormalMap, canvasTexture } from '../render/materials.js';
+import { enhanceMaterial, makeAsphaltTexture, makeNoiseNormalMap, makeStripeTexture, canvasTexture } from '../render/materials.js';
 import { drawNear } from '../render/drawDistance.js';
 
 const PIECE_ROWS = 500;      // road samples per piece of ribbon (500 x 2 m = one kilometre)
@@ -24,6 +24,14 @@ const AREA_SIZE = 600;       // metres: small roadside things are grouped into s
 // everything your headlights touch turns the same flat cream) but keeps it below the level at
 // which lamps start to bloom (1.25) and the streak filter (render/streak.js) draws lines (5).
 export const ROAD_GLARE = 1.1;
+
+// Paint on asphalt (lane lines, stop lines, zebra crossings, the road's name): it shines back in
+// headlights and is drawn just above the road so it never flickers. `extra` = more material settings.
+export function roadPaint(color, extra = {}) {
+  const material = enhanceMaterial(new THREE.MeshStandardMaterial({ color, roughness: 0.55, ...extra }), { retro: 0.55, wet: true, limit: ROAD_GLARE });
+  material.polygonOffset = true; material.polygonOffsetFactor = -2; material.polygonOffsetUnits = -2;
+  return material;
+}
 
 export function buildRoad(map) {
   const { road } = map;
@@ -42,28 +50,24 @@ export function buildRoad(map) {
   group.add(buildStrip(map, asphalt, (i) => [{ d: -road.half[i] }, { d: 0 }, { d: road.half[i] }]));
 
   // ---- Painted lines (slightly above the asphalt) --------------------------
-  const paint = (color) => {
-    const m = enhanceMaterial(new THREE.MeshStandardMaterial({ color, roughness: 0.55 }), { retro: 0.55, wet: true, limit: ROAD_GLARE });
-    m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -2;
-    return m;
-  };
-  const yellow = paint(0xc8961a), white = paint(0xd8d8d2);
+  const yellow = roadPaint(0xc8961a), white = roadPaint(0xd8d8d2);
   // One painted line on each side of the centre: where(i) = metres from the centre line at
   // sample i, or null for "no paint here" (the gaps of a broken line).
   const lines = (material, where, width) => {
     const stripe = (d) => [{ d: d - width / 2, y: 0.012 }, { d: d + width / 2, y: 0.012, cut: true }];
     group.add(buildStrip(map, material, (i) => { const d = where(i); return d === null ? null : [...stripe(-d), ...stripe(d)]; }));
   };
-  lines(yellow, (i) => Math.max(0.14, road.median[i]), 0.11);                       // double yellow: together, or one each side of a median
+  lines(yellow, (i) => (road.centreLine[i] && road.wall[i] !== 2 ? Math.max(0.14, road.median[i] - 0.15) : null), 0.11);   // double yellow: together, or one each side of a median (none on a narrow road)
+  lines(roadPaint(0xb02a1e), (i) => (road.lanes[i] > 1 ? road.half[i] - 0.14 : null), 0.12);              // the red no-parking line along the edge of a main road
   lines(white, (i) => road.median[i] + road.lanes[i] * road.laneWidth[i], 0.12);    // white edge lines
   // A wide median between the two double lines is filled with slanted yellow bars (no driving here).
-  const hatch = paint(0xc8961a);
+  const hatch = roadPaint(0xc8961a);
   hatch.map = canvasTexture(64, 64, (g, w, h) => {
     g.clearRect(0, 0, w, h); g.strokeStyle = '#fff'; g.lineWidth = 9;
     for (let x = -h; x < w * 2; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.stroke(); }
   });
   hatch.map.repeat.set(3, 2); hatch.alphaTest = 0.5;
-  group.add(buildStrip(map, hatch, (i) => (road.median[i] > 0.5 ? [{ d: -road.median[i] + 0.22, y: 0.012 }, { d: road.median[i] - 0.22, y: 0.012 }] : null)));
+  group.add(buildStrip(map, hatch, (i) => (road.median[i] > 0.5 && !road.wall[i] ? [{ d: -road.median[i] + 0.22, y: 0.012 }, { d: road.median[i] - 0.22, y: 0.012 }] : null)));
   // Broken white line between two lanes going the same way: 4 m of paint, 6 m of gap.
   lines(white, (i) => (road.lanes[i] > 1 && i % 5 < 3 ? road.median[i] + road.laneWidth[i] : null), 0.1);
 
@@ -99,27 +103,28 @@ export function buildRoad(map) {
   // ---- Guardrails -----------------------------------------------------------
   const steel = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x9a9fa3, metalness: 0.75, roughness: 0.42, side: THREE.DoubleSide }), { limit: ROAD_GLARE });
   const wallConcrete = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x8a8882, roughness: 0.9, side: THREE.DoubleSide }), { limit: ROAD_GLARE });
+  const greenRail = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x2f8a5a, roughness: 0.6, side: THREE.DoubleSide }), { limit: ROAD_GLARE });
+  const railPosts = [];
   const postTransforms = [], reflectorWhite = [], reflectorYellow = [], delineators = [];
   const p = {};
   for (const side of [-1, 1]) {
     const rail = side > 0 ? road.railR : road.railL;
     group.add(buildStrip(map, steel, (i) => {
-      if (rail[i] !== 1 || road.lanes[i] > 1) return null;  // gap in the rail (the wide road has a concrete wall instead, below)
+      if (rail[i] !== 1) return null;                       // gap in the rail
       const o = road.barrier[i] * side;
       // W-shaped steel beam, seen from the end
       return [[0, 0.50], [-0.07, 0.56], [-0.02, 0.655], [-0.07, 0.75], [0, 0.81]]
         .map(([dx, y]) => ({ d: o + dx * side, y }));
     }, { cast: true }));
-    // Where the road has two lanes each way the drop side gets a concrete "New Jersey" wall, as on Taiwan's coast road.
-    group.add(buildStrip(map, wallConcrete, (i) => {
+    // Beside a main road the sea side also has a cycle path behind the guardrail, fenced with green railings.
+    group.add(buildStrip(map, greenRail, (i) => {
       if (rail[i] !== 1 || road.lanes[i] < 2) return null;
-      const o = road.barrier[i] * side;
-      return [[-0.3, 0], [-0.3, 0.08], [-0.17, 0.3], [-0.1, 0.8], [0.1, 0.8], [0.17, 0.3], [0.3, 0.08], [0.3, 0]].map(([dx, y]) => ({ d: o + dx * side, y }));
-    }, { cast: true }));
+      const o = (road.barrier[i] + 3.2) * side;
+      return [{ d: o, y: 0.45 }, { d: o, y: 0.55, cut: true }, { d: o, y: 1.0 }, { d: o, y: 1.1 }];
+    }));
     for (let i = 0; i < road.count; i += 2) {               // a post every 4 m
-      if (rail[i] === 1 && road.lanes[i] > 1) {             // concrete wall: only a reflector on its face, every 16 m
-        if (i % 8 === 0) { map.pointAt(i * ROAD.step, (road.barrier[i] - 0.2) * side, p); (side > 0 ? reflectorWhite : reflectorYellow).push({ x: p.x, y: p.y + 0.5, z: p.z, yaw: p.yaw }); }
-      } else if (rail[i] === 1) {
+      if (rail[i] === 1 && road.lanes[i] > 1 && i % 2 === 0) { map.pointAt(i * ROAD.step, (road.barrier[i] + 3.2) * side, p); railPosts.push({ x: p.x, y: p.y + 0.55, z: p.z, yaw: p.yaw }); }
+      if (rail[i] === 1) {
         map.pointAt(i * ROAD.step, (road.barrier[i] + 0.08) * side, p);
         postTransforms.push({ x: p.x, y: p.y + 0.36, z: p.z, yaw: p.yaw });
         if (i % 8 === 0) {                                  // reflector every 16 m
@@ -131,6 +136,34 @@ export function buildRoad(map) {
         delineators.push({ x: p.x, y: p.y + 0.85, z: p.z, yaw: p.yaw });
       }
     }
+  }
+  // The concrete wall down the middle of a divided road (ROAD_TYPES: wall).
+  group.add(buildStrip(map, wallConcrete, (i) => (road.wall[i] === 1
+    ? [[-0.3, 0], [-0.3, 0.08], [-0.17, 0.3], [-0.1, 0.85], [0.1, 0.85], [0.17, 0.3], [0.3, 0.08], [0.3, 0]].map(([d, y]) => ({ d, y })) : null), { cast: true }));
+  // Where the wall stops for an opening (road.wall = 2), each end is capped with a yellow-and-black block.
+  const wallEnds = [];
+  for (let i = 0; i < road.count; i++) {
+    const before = road.wall[(i - 1 + road.count) % road.count], after = road.wall[(i + 1) % road.count];
+    if (road.wall[i] === 1 && (before !== 1 || after !== 1)) { map.pointAt(i * ROAD.step, 0, p); wallEnds.push({ x: p.x, y: p.y + 0.5, z: p.z, yaw: p.yaw }); }
+  }
+  group.add(instancesByArea(new THREE.BoxGeometry(0.66, 1.0, 1.4), new THREE.MeshStandardMaterial({ map: makeStripeTexture('#e8c21a', '#151515'), roughness: 0.6 }), wallEnds));
+  group.add(instancesByArea(new THREE.BoxGeometry(0.07, 1.1, 0.07), greenRail, railPosts));
+  // The road's name painted on the asphalt every few hundred metres, in each direction (map.routeNames).
+  for (const { label } of map.routeNames.filter((entry, k, list) => list.findIndex((e) => e.label === entry.label) === k)) {
+    const letters = [...label], face = roadPaint(0xd8d8d2);
+    face.map = canvasTexture(64, 64 * letters.length, (g, w, h) => {
+      g.clearRect(0, 0, w, h); g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = 'bold 54px "PingFang TC", "Heiti TC", Arial, sans-serif';
+      letters.forEach((letter, k) => g.fillText(letter, w / 2, h - 32 - k * 64));          // first character nearest the driver
+    }, { repeat: false });
+    face.alphaTest = 0.4; face.side = THREE.DoubleSide;
+    const places = [];
+    for (let s = 260; s < road.length - 100; s += 430) {
+      const index = map.indexAt(s), name = [...map.routeNames].reverse().find((entry) => entry.index <= index) || map.routeNames[map.routeNames.length - 1];
+      if (name.label !== label) continue;
+      for (const dir of [1, -1]) { map.pointAt(s, map.laneCentre(s, dir, road.lanes[index] - 1), p); places.push({ x: p.x, y: p.y + 0.014, z: p.z, yaw: p.yaw + (dir > 0 ? 0 : Math.PI) }); }
+    }
+    group.add(instancesByArea(new THREE.PlaneGeometry(1.5, 2.3 * letters.length).rotateX(-Math.PI / 2), face, places));
   }
   const postMat = new THREE.MeshStandardMaterial({ color: 0x70757a, metalness: 0.6, roughness: 0.6 });
   group.add(instancesByArea(new THREE.BoxGeometry(0.09, 0.9, 0.14), postMat, postTransforms, { cast: true }));

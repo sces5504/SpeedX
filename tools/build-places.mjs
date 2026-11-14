@@ -5,6 +5,7 @@
 //   node tools/build-places.mjs --id shimen-coast            (keeps an existing list)
 //   node tools/build-places.mjs --id shimen-coast --force    (throws the old list away)
 //   node tools/build-places.mjs --id shimen-coast --houses   (keeps the list and ADDS a few houses)
+// Every run also writes "woods": the outlines of the real forests around the road.
 //
 // It asks OpenStreetMap for what stands near the road — restaurants, cafés, a
 // police station, temples, public toilets, mapped buildings, bus stops, power
@@ -44,9 +45,9 @@ const toLatLon = ([x, z]) => [map.origin.lat - z / (DEG * EARTH_R), map.origin.l
 const corners = map.road.map(toLatLon), pad = 0.004;
 const box = [Math.min(...corners.map((c) => c[0])) - pad, Math.min(...corners.map((c) => c[1])) - pad,
              Math.max(...corners.map((c) => c[0])) + pad, Math.max(...corners.map((c) => c[1])) + pad].join(',');
-const wanted = ['way[building]', 'node[amenity]', 'way[amenity]', 'node[shop]', 'node[highway=bus_stop]', 'node[power=tower]', 'node[place~"^(hamlet|village|neighbourhood)$"]'];
+const wanted = ['way[building]', 'node[amenity]', 'way[amenity]', 'node[shop]', 'node[highway=bus_stop]', 'node[power=tower]', 'node[place~"^(hamlet|village|neighbourhood)$"]', 'way[natural=wood]', 'way[landuse=forest]'];
 const query = `[out:json][timeout:90];(${wanted.map((w) => `${w}(${box});`).join('')});out geom;`;
-const cacheFile = path.resolve('tools/.cache', `osm-places-v2-${args.id}.json`);
+const cacheFile = path.resolve('tools/.cache', `osm-places-v3-${args.id}.json`);
 if (!fs.existsSync(cacheFile)) {
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
@@ -153,8 +154,17 @@ if ('houses' in args) {
   buildings.length = 0; buildings.push(...kept);
 }
 map.buildings = buildings;
+// The outlines of the real forests ("woods"): the game plants trees inside them (scenery "where": "woods").
+// Points closer together than 12 m are dropped: the game does not need the outline that fine.
+map.woods = elements.filter((e) => e.type === 'way' && (e.tags?.natural === 'wood' || e.tags?.landuse === 'forest') && e.geometry?.length > 3).map((e) => {
+  const outline = [];
+  for (const p of e.geometry.map((g) => toLocal(g.lat, g.lon))) if (!outline.length || Math.hypot(p[0] - outline[outline.length - 1][0], p[1] - outline[outline.length - 1][1]) > 12) outline.push(p.map(Math.round));
+  return outline;
+}).filter((outline) => outline.length > 3);
 const { road: roadPoints, ...rest } = map;
-const lines = JSON.stringify(rest, null, 2).replace(/\{\n\s+"kind"[^}]*\}/g, (entry) => entry.replace(/\n\s*/g, ' '));   // one building per line
+const lines = JSON.stringify({ ...rest, woods: '@woods' }, null, 2)
+  .replace(/\{\n\s+"kind"[^}]*\}/g, (entry) => entry.replace(/\n\s*/g, ' '))                                    // one building per line
+  .replace('"@woods"', '[\n' + map.woods.map((outline) => '    ' + JSON.stringify(outline)).join(',\n') + '\n  ]');   // one forest per line
 fs.writeFileSync(mapFile, lines.replace(/\n}$/, ',\n  "road": ' + JSON.stringify(roadPoints) + '\n}') + '\n');
 const count = {};
 for (const b of buildings) count[b.kind] = (count[b.kind] || 0) + 1;
