@@ -52,24 +52,35 @@ const ENGINE_LAYERS = [
 const SLOT_CENTRES = { idle: 900, low: 2600, mid: 5000, high: 6800 }, SLOTS = ['idle', 'low', 'mid', 'high'];
 
 export function createAudio() {
-  const audio = { ready: false, start, update() {}, impact() {}, crash() {}, passBy() {}, beep() {}, hornAt() {}, shift() {}, play() {}, setPaused() {}, clips: {} };
+  const audio = { ready: false, start, preload, update() {}, impact() {}, crash() {}, passBy() {}, beep() {}, hornAt() {}, shift() {}, play() {}, setPaused() {}, clips: {} };
   let lastUpdate = 0;
   let ctx, master, muffle, outside, cabinFilter, echo, noiseBuffer, probe, probeData, lastCheck = 0, profileName = 'default';
   const buffers = {};                 // decoded recordings (kept if the sound system has to restart)
+
+  // Download every recording listed in clips.json. main.js calls this as soon as the game opens, so
+  // nothing is left to fetch when the player presses DRIVE. (Turning the files into playable sound has
+  // to wait for that click — see start() — because browsers only allow sound after one.)
+  let downloads = null;               // the download in progress or finished: [[clip name, file bytes], ...]
+  function preload() {
+    if (!downloads) {
+      downloads = (async () => {
+        audio.clips = await (await fetch('audio/clips.json')).json();
+        return Promise.all(Object.entries(audio.clips).map(async ([clipName, clip]) => [clipName, await (await fetch('audio/' + clip.file)).arrayBuffer()]));
+      })();
+      downloads.catch(() => { downloads = null; });         // it failed (no network?): try again next time
+    }
+    return downloads;
+  }
 
   // Browsers only allow sound after a click/key press, so this is called from the menu.
   async function start(name) {
     profileName = name || profileName;
     if (ctx) { setProfile(playerEngine, profileName); ctx.resume(); return; }
-    // Load every recording listed in clips.json (only once).
+    // Decode every recording (only once). They were downloaded by preload() when the game opened.
     const Context = window.AudioContext || window.webkitAudioContext;
     ctx = new Context();
     if (!Object.keys(buffers).length) {
-      audio.clips = await (await fetch('audio/clips.json')).json();
-      await Promise.all(Object.entries(audio.clips).map(async ([clipName, clip]) => {
-        const bytes = await (await fetch('audio/' + clip.file)).arrayBuffer();
-        buffers[clipName] = await ctx.decodeAudioData(bytes);
-      }));
+      await Promise.all((await preload()).map(async ([clipName, bytes]) => { buffers[clipName] = await ctx.decodeAudioData(bytes); }));
     }
     wire();
   }

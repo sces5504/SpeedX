@@ -94,6 +94,13 @@ export const NIGHT = {
   blendSeconds: 90,     // the last part of a stage, spent fading into the next one
 };
 
+// What someone gets the FIRST time they play. After that the game remembers what they chose
+// themselves (in the pause menu) and these are not used again.
+export const FIRST_TIME = {
+  filter: 'classic',       // the picture filter: 'off', 'classic' (CLASSIC GREEN) or 'vhs' - see render/filters.js
+  rain: true,              // start in the rain
+};
+
 export const GAMEPLAY = {
   trafficCount: 5,         // ordinary cars alive around the player
   rivalCount: 2,           // illegal racers cruising the road

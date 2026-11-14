@@ -13,7 +13,7 @@
 //   audio/     synthesised sound          ui/  HUD, map, menus
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
-import { FEEL, GAMEPLAY, GRAPHICS, ROAD } from './config.js';
+import { FEEL, FIRST_TIME, GAMEPLAY, GRAPHICS, ROAD } from './config.js';
 import { input } from './core/input.js';
 import { clamp, damp, formatTime, smoothstep } from './core/mathUtils.js';
 import { loadMap, loadMapInfo, listMaps } from './world/mapData.js';
@@ -81,13 +81,17 @@ scene.add(signals.group);
 pois.neons.push(...signals.lights);
 const sky = createSky(scene, renderer, map.info.cityLights);
 const weather = createWeather(scene);
+// Rain as the player left it last time; the very first time, as FIRST_TIME says.
+const savedRain = localStorage.getItem('speedx-rain');
+weather.raining = savedRain === null ? FIRST_TIME.rain : savedRain === 'on';
 const rig = createCameras();
 const postfx = createPostFx(renderer, scene, rig.camera);
-postfx.setFilter(localStorage.getItem('speedx-filter') || 'off');      // the picture filter chosen last time (pause menu)
+postfx.setFilter(localStorage.getItem('speedx-filter') || FIRST_TIME.filter);      // the picture filter chosen last time (pause menu)
 const carProbe = createCarProbe(renderer, scene);
 const sparks = createSparks(scene);
 const challenge = createChallenge(scene, map);
 const audio = createAudio();
+audio.preload().catch(() => {});       // download every sound now, so pressing DRIVE does not have to wait for them
 const hud = createHud();
 const mapView = createMapView(map, (poi) => travelTo(poi));
 
@@ -189,7 +193,7 @@ const menu = createMenu({
     hud.banner('SPEEDX', 'flash a racer to race · find a cone for time attack', 4);
   },
   onResume: () => setPaused(false),
-  onToggleRain: () => { weather.toggle(); return weather.raining; },
+  onToggleRain: () => { weather.toggle(); localStorage.setItem('speedx-rain', weather.raining ? 'on' : 'off'); return weather.raining; },
   onNextNight: () => { sky.setPreset(sky.index + 1); return sky.preset.name; },
   onNextFilter: () => {                                        // step to the next picture filter in render/filters.js
     const next = FILTERS[(FILTERS.indexOf(postfx.filter) + 1) % FILTERS.length];
