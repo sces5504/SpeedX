@@ -32,6 +32,16 @@ jobs:
       - run: npm run build -- --base="$PAGES_BASE/"
         env:
           PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+      # The previous version of the game stays online at <site>/old/, so the two can be compared.
+      # It is built from the tag old-version-2026-11-13 into dist/old/ (delete these two steps to drop it).
+      - uses: actions/checkout@v4
+        with:
+          ref: old-version-2026-11-13
+          path: old-version
+      - run: npm ci && npm run build -- --base="$PAGES_BASE/old/" --outDir ../dist/old --emptyOutDir
+        working-directory: old-version
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
