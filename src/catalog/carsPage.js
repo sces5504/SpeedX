@@ -308,9 +308,10 @@ function looksCard(spec, cockpit) {
       ['車色', el('span', { class: 'chips' }, spec.colors.map((color) => el('span', { class: 'chip', style: `background:${cssColor(color)}`, title: cssColor(color) }))), `${spec.colors.length} 色，第一個是預設`],
       spec.twoTone !== undefined && ['雙色下半部', el('span', { class: 'chips' }, el('span', { class: 'chip', style: `background:${cssColor(spec.twoTone)}` })), cssColor(spec.twoTone)],
       ['頭燈', lamp(H), H.popup ? '跳燈（開燈時升起）' : '固定式'],
-      ['尾燈', lamp(T), [T.style === 'round' ? '圓形三連燈' : T.h > T.w ? '直立式' : '橫條式', T.garnish && `中間飾板：${T.garnish}`].filter(Boolean).join(' · ')],
-      ['車門', `${spec.doors ?? 2} 門`],
-      ['配件', [spec.spoiler && `尾翼（高 ${spec.spoiler} m）`, spec.grille && '水箱護罩', spec.moulding && '車側防擦條', spec.exhausts && `排氣管 ×${spec.exhausts}`,
+      ['尾燈', lamp(T), T.h > T.w ? '直立式' : '橫條式'],
+      ['車頭／車尾零件', `${spec.nose?.length ?? 0} ＋ ${spec.tail?.length ?? 0} 件`, spec.nose || spec.tail ? 'car.json 的 nose / tail：燈具、水箱護罩、保險桿飾板，貼在車殼曲面上' : '沒有列出：由頭燈、尾燈的位置自動排出一組'],
+      ['車門', `${doorCount(spec)} 門`, spec.windows ? `側窗 ${spec.windows.length} 片（每側）` : ''],
+      ['配件', [spec.spoiler && (spec.spoiler.gt ? `GT 尾翼（高 ${spec.spoiler.height} m）` : `尾翼（高 ${spec.spoiler.height ?? spec.spoiler} m）`), spec.skirts && '側裙', spec.moulding && '車側防擦條', spec.exhausts && `排氣管 ×${spec.exhausts}`,
         spec.cargoBox && `貨廂（高 ${spec.cargoBox.bottom}–${spec.cargoBox.top} m）`].filter(Boolean).join('、') || '無'],
       ['駕駛座', spec.driverSide > 0 ? '右駕' : '左駕', cockpit ? `儀表顏色 ${spec.gaugeColor}` : '路人車沒有駕駛艙'],
       cabin && ['內裝配色', el('span', { class: 'chips' }, Object.entries(cabin).filter(([, value]) => /^#[0-9a-f]{6}$/i.test(value)).map(([part, value]) => el('span', { class: 'chip', style: `background:${value}`, title: `${part} ${value}` }))),
@@ -318,9 +319,12 @@ function looksCard(spec, cockpit) {
     ]));
 }
 
+// Side doors: counted from the door cuts when car.json lists them ("doorLines"), otherwise its "doors".
+const doorCount = (spec) => (spec.doorLines ? (spec.doorLines.length - 1) * 2 : spec.doors ?? 2);
+
 // Anything in car.json this page has no card for yet (a field added to the game later) still shows up here.
 const SHOWN = ['id', 'folder', 'role', 'name', 'year', 'length', 'width', 'height', 'wheelbase', 'frontOverhang', 'wheelRadius', 'clearance', 'tumble', 'mass', 'colors', 'twoTone',
-  'stations', 'headlights', 'taillights', 'doors', 'moulding', 'exhausts', 'spoiler', 'grille', 'cargoBox', 'driverSide', 'gaugeColor', 'interior', 'frontWeight', 'cgHeight', 'dragArea',
+  'stations', 'windows', 'doorLines', 'headlights', 'taillights', 'nose', 'tail', 'doors', 'moulding', 'exhausts', 'spoiler', 'skirts', 'cargoBox', 'driverSide', 'gaugeColor', 'interior', 'frontWeight', 'cgHeight', 'dragArea',
   'engine', 'gears', 'finalDrive', 'sound', 'grip', 'brakeG', 'model'];
 function otherFieldsCard(spec) {
   const others = Object.entries(spec).filter(([key]) => !SHOWN.includes(key));

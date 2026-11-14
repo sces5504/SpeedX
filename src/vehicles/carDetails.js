@@ -1,21 +1,25 @@
 // ---------------------------------------------------------------------------
 // carDetails.js — the small parts that turn a smooth shell into a car:
 //
-//   lenses       head and tail lamps as moulded glass with a pattern inside
-//                (dark and glossy when off, glowing through the pattern when on)
+//   lenses       lamp glass with a pattern inside (dark and glossy when off,
+//                glowing through the pattern when on), and flat lamps for
+//                pop-up pods and side repeaters
+//   cargo box    the box body of a truck
 //   body lines   the gaps round the doors, bonnet and boot, window rubbers
 //   fittings     door mirrors, door handles, side repeaters, exhaust pipes,
-//                front air intake and lip, windscreen wipers
+//                front lip, windscreen wipers
 //
-// Everything sits ON the skin made by carShell.js (shellSurface()), so it works
-// for any car.json. carBuilder.js calls these and wires up the lamps.
+// Everything sits ON the skin made by carShell.js (its `surface`), so it works
+// for any car.json. The lamps and grilles on the nose and tail are in carEnds.js.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { canvasTexture, enhanceMaterial } from '../render/materials.js';
 import { carReflection } from '../render/reflections.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { U } from './carShell.js';
 
-const LIMIT = 0.5;      // same reason as PAINT_LIMIT in carBuilder.js: nothing burns out in a headlight beam
+export const LIMIT = 0.5;      // same reason as PAINT_LIMIT in carBuilder.js: nothing burns out in a headlight beam
 const gap = new THREE.MeshBasicMaterial({ color: 0x030303, side: THREE.DoubleSide });       // a shut line is just darkness
 export const rubber = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x08090a, roughness: 0.6, side: THREE.DoubleSide }), { limit: LIMIT });
 const pipeMetal = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x8d9197, roughness: 0.3, metalness: 1, side: THREE.DoubleSide, envMap: carReflection }), { limit: LIMIT });
@@ -48,7 +52,6 @@ const headPattern = canvasTexture(128, 64, (g, w, h) => {
   g.fillStyle = bowl; g.fillRect(0, 0, w, h);
   g.strokeStyle = 'rgba(20,24,28,0.35)'; g.lineWidth = 1;                // flutes moulded into the glass
   for (let x = 4; x < w; x += 6) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
-  g.strokeStyle = 'rgba(10,12,14,0.9)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, w - 3, h - 3);
 }, { repeat: false });
 const tailPattern = canvasTexture(128, 64, (g, w, h) => {
   g.fillStyle = '#8a8a8a'; g.fillRect(0, 0, w, h);
@@ -58,7 +61,6 @@ const tailPattern = canvasTexture(128, 64, (g, w, h) => {
   g.fillStyle = 'rgba(0,0,0,0.3)';                                       // ribs across the lens, and a grid of little prisms
   for (let y = 3; y < h; y += 7) g.fillRect(0, y, w, 2);
   for (let x = 5; x < w; x += 9) g.fillRect(x, 0, 1, h);
-  g.strokeStyle = 'rgba(0,0,0,0.85)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, w - 3, h - 3);
 }, { repeat: false });
 
 // Lens colour when the lamp is off, by the colour of its light.
@@ -86,10 +88,42 @@ export function buildLamp(w, h, glow, { facing = 1, depth = 0.03, round = false 
   return lamp;
 }
 
+// ---- Cargo box -------------------------------------------------------------------------
+
+// What the walls of a box body look like: pale aluminium sheets with a seam every 60 cm, a
+// rail along the top and the bottom...
+const boxWall = canvasTexture(256, 128, (g, w, h) => {
+  g.fillStyle = '#cfd1cd'; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 64) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x, 0, 2, h); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + 2, 0, 2, h); }
+  g.fillStyle = '#8f9390'; g.fillRect(0, 0, w, 7); g.fillRect(0, h - 9, w, 9);
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, 7, w, 1); g.fillRect(0, h - 10, w, 1);
+});
+// ...and its back: two doors in a frame, each with two lock bars and three hinges.
+const boxDoors = canvasTexture(128, 128, (g, w, h) => {
+  g.fillStyle = '#8f9390'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#cfd1cd'; g.fillRect(6, 6, w / 2 - 8, h - 14); g.fillRect(w / 2 + 2, 6, w / 2 - 8, h - 14);
+  g.fillStyle = '#6f7372'; for (const x of [22, 46, 80, 104]) g.fillRect(x, 4, 3, h - 10);
+  g.fillStyle = '#3c3f3f'; for (const y of [22, 62, 102]) { g.fillRect(4, y, 7, 5); g.fillRect(w - 11, y, 7, 5); }
+  g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(w / 2 - 1, 6, 2, h - 14);
+}, { repeat: false });
+const boxLook = (settings) => enhanceMaterial(new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.25, envMap: carReflection, envMapIntensity: 0.5, ...settings }), { limit: LIMIT });
+const BOX_SIDES = boxLook({ map: boxWall }), BOX_BACK = boxLook({ map: boxDoors }), BOX_PLAIN = boxLook({ color: 0xcfd1cd }), BOX_UNDER = boxLook({ color: 0x2a2c2d });
+
+/** The box body of a truck ("cargoBox" in car.json), `width` x `height` x `length` metres, its back facing +Z. */
+export function buildCargoBox(width, height, length) {
+  const geometry = new THREE.BoxGeometry(width, height, length);
+  // The wall picture is 2.4 m of wall: repeat it along the two long sides (the first 8 corners of a box).
+  const uv = geometry.attributes.uv;
+  for (let i = 0; i < 8; i++) uv.setX(i, uv.getX(i) * length / 2.4);
+  const box = new THREE.Mesh(geometry, [BOX_SIDES, BOX_SIDES, BOX_PLAIN, BOX_UNDER, BOX_BACK, BOX_PLAIN]);   // right, left, top, bottom, back, front
+  box.castShadow = true;
+  return box;
+}
+
 // ---- Body lines and fittings ---------------------------------------------------------
 
 // A thin strip between two rows of points (same number of points in each).
-function strip(rowA, rowB, material) {
+function strip(rowA, rowB) {
   const positions = [], index = [];
   rowA.forEach((a, i) => { positions.push(a.x, a.y, a.z, rowB[i].x, rowB[i].y, rowB[i].z); });
   for (let i = 0; i < rowA.length - 1; i++) { const k = i * 2; index.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
@@ -97,13 +131,13 @@ function strip(rowA, rowB, material) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(index);
   geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, material);
+  return geometry;
 }
 const steps = (from, to, count) => Array.from({ length: count + 1 }, (_, k) => from + ((to - from) * k) / count);
 
 /**
- * Add shut lines, window rubbers, mirrors, handles, repeaters, wipers, intake, lip and exhausts.
- * @param body     the group to add to               @param surface  shellSurface(spec, dims)
+ * Add shut lines, window rubbers, mirrors, handles, repeaters, wipers, lip and exhausts.
+ * @param body     the group to add to               @param surface  makeShell(spec, dims).surface
  * @param paint    the body colour material
  * @returns {{ repeaters: {L: Mesh[], R: Mesh[]} }}  the side indicator lamps, for the light switchboard
  */
@@ -116,42 +150,46 @@ export function addBodyDetails(body, surface, spec, dims, paint) {
   const cowl = spec.stations.find((s) => s[4] === 'ws')[0];
   const rearWindow = spec.stations.findIndex((s) => s[4] === 'rw');
   const deck = rearWindow >= 0 ? spec.stations[rearWindow + 1]?.[0] ?? 1 : 1;                 // where the rear window meets the boot (1 = no boot)
-  const doorFront = Math.max(cowl - 0.015, frontArchEnd + 0.012);
+  // Where the doors are cut: the front edge of the front door, then the rear edge of every door.
+  // "doorLines" in car.json gives them exactly; otherwise they are worked out from the cabin.
   const pillarB = cab.middle + 0.03 / L;
-  // Two doors: the door ends behind the B-pillar. Four doors: a second door runs back to the rear wheel.
-  const doorEnds = spec.doors === 4 ? [pillarB - 0.03 / L, Math.min(cab.to + 0.01, rearArchStart - 0.004)] : [Math.min(pillarB + 0.03 / L, rearArchStart - 0.01)];
+  const [doorFront, ...doorEnds] = spec.doorLines ?? [Math.max(cowl - 0.015, frontArchEnd + 0.012),
+    ...(spec.doors === 4 ? [pillarB - 0.03 / L, Math.min(cab.to + 0.01, rearArchStart - 0.004)] : [Math.min(pillarB + 0.03 / L, rearArchStart - 0.01)])];
   const line = 0.007 / L;                                    // half the width of a shut line, as a fraction of the length
+  const gaps = [], rubbers = [];                             // all the thin strips; each kind becomes one mesh at the end
 
   for (const side of [-1, 1]) {
     const row = (t, us) => us.map((u) => surface.at(t, u, side, LIFT));
     const lengthwise = (ts, u) => ts.map((t) => surface.at(t, u, side, LIFT));
     // doors: front edge, rear edge(s), and the sill under them
-    const upTheSide = steps(3.3, 7.0, 10);
-    for (const t of [doorFront, ...doorEnds]) body.add(strip(row(t - line, upTheSide), row(t + line, upTheSide), gap));
+    const upTheSide = steps(U.sill, U.shoulder - 0.1, 12);
+    for (const t of [doorFront, ...doorEnds]) gaps.push(strip(row(t - line, upTheSide), row(t + line, upTheSide)));
     const sillRun = steps(doorFront, doorEnds[doorEnds.length - 1], 14);
-    body.add(strip(lengthwise(sillRun, 3.3), lengthwise(sillRun, 3.42), gap));
+    gaps.push(strip(lengthwise(sillRun, U.sill), lengthwise(sillRun, U.sill + 0.12)));
     // bonnet and boot lid: a line along each edge and one across the front (or back)
     for (const [from, to, cross] of [[0.045, cowl - 0.02, 0.045], [deck + 0.02, 0.965, 0.965]]) {
       if (to - from < 0.05) continue;                        // no real boot (hatchback, truck)
       const run = steps(from, to, 12);
-      body.add(strip(lengthwise(run, 9.25), lengthwise(run, 9.38), gap));
-      const acrossTheTop = steps(9.3, 13, 8);
-      body.add(strip(row(cross - line, acrossTheTop), row(cross + line, acrossTheTop), gap));
+      gaps.push(strip(lengthwise(run, U.deckEdge - 0.05), lengthwise(run, U.deckEdge + 0.08)));
+      const acrossTheTop = steps(U.deckEdge, U.centre, 8);
+      gaps.push(strip(row(cross - line, acrossTheTop), row(cross + line, acrossTheTop)));
     }
-    // rubber along the bottom of the side windows
-    const glassRun = steps(surface.glassSpan[0], surface.glassSpan[1], 20);
-    body.add(strip(lengthwise(glassRun, 7.82), lengthwise(glassRun, 8.06), rubber));
+    // rubber along the bottom of every side window
+    for (const rows of surface.windows) {
+      const run = steps(rows[0].t, rows[rows.length - 1].t, 14);
+      rubbers.push(strip(lengthwise(run, U.glassLow - 0.6), lengthwise(run, U.glassLow + 0.02)));
+    }
     // "moulding": true in car.json = a black rubbing strip along the doors and round the bumpers
     if (spec.moulding) {
       for (const [from, to] of [[0.004, frontArchEnd - (wheelGap * 2 + 0.02) / L], [frontArchEnd + 0.004, rearArchStart - 0.004], [rearArchStart + (wheelGap * 2 + 0.02) / L, 0.996]]) {
         if (to - from < 0.02) continue;
         const run = steps(from, to, 12);
-        body.add(strip(lengthwise(run, 4.75), lengthwise(run, 5.02), rubber));
+        rubbers.push(strip(lengthwise(run, U.waist - 0.25), lengthwise(run, U.waist + 0.02)));
       }
     }
 
     // door mirror: a rounded housing on a short stalk at the front corner of the side window
-    const mirrorAt = surface.at(surface.glassSpan[0] + 0.05, 7.9, side);
+    const mirrorAt = surface.at(surface.windows[0][0].t + 0.05, U.shoulder - 0.1, side);
     const housing = new THREE.Mesh(new RoundedBoxGeometry(0.17, 0.105, 0.085, 3, 0.035), paint);
     housing.position.set(mirrorAt.x + side * 0.115, mirrorAt.y + 0.06, mirrorAt.z);
     housing.rotation.y = side * -0.18;
@@ -177,25 +215,23 @@ export function addBodyDetails(body, surface, spec, dims, paint) {
     body.add(repeater);
     (side < 0 ? repeaters.L : repeaters.R).push(repeater);
   }
+  body.add(new THREE.Mesh(mergeGeometries(gaps), gap), new THREE.Mesh(mergeGeometries(rubbers), rubber));
 
   // windscreen wipers, parked along the bottom of the glass
   for (const x of [-0.42, 0.12]) {
-    const from = surface.at(cowl + 0.012, 13, 1, 0.012), wiper = new THREE.Mesh(new THREE.BoxGeometry(dims.halfW * 0.62, 0.012, 0.018), rubber);
+    const from = surface.at(cowl + 0.012, U.centre, 1, 0.012), wiper = new THREE.Mesh(new THREE.BoxGeometry(dims.halfW * 0.62, 0.012, 0.018), rubber);
     wiper.position.set((x + 0.31) * dims.halfW, from.y + 0.004, from.z + 0.02);
     wiper.rotation.y = -0.07;
     wiper.name = 'wiper_parked';                            // (the player's car swaps these for working ones: interior.js)
     body.add(wiper);
   }
-  // front: a dark air intake low in the bumper, and (sports cars) a lip under it
-  const noseZ = dims.frontZ, low = spec.clearance + 0.07;
-  const intake = new THREE.Mesh(plateGeometry(dims.halfW * 1.05, 0.085, 0.02, 0.03).rotateY(Math.PI), rubber);
-  intake.position.set(0, low + 0.07, noseZ + 0.012);
-  body.add(intake);
   if (hero) {
+    // sports cars: a lip under the front bumper...
+    const noseZ = dims.frontZ, low = spec.clearance + 0.07;
     const lip = new THREE.Mesh(new RoundedBoxGeometry(dims.halfW * 1.62, 0.035, 0.16, 2, 0.015), rubber);
     lip.position.set(0, low - 0.01, noseZ + 0.07);
     body.add(lip);
-    // exhaust: one pipe (or two, "exhausts": 2 in car.json) poking out under the rear bumper
+    // ...and the exhaust: one pipe (or two, "exhausts": 2 in car.json) poking out under the rear bumper
     const pipes = spec.exhausts === 2 ? [-0.5, 0.5] : [0.52];
     for (const x of pipes) {
       const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.16, 14, 1, true).rotateX(Math.PI / 2), pipeMetal);

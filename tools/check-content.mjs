@@ -9,6 +9,7 @@ const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file)); } c
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 
 // ---- Cars ---------------------------------------------------------------------------
+const PART_KINDS = ['head', 'tail', 'brake', 'signal', 'reverse', 'black', 'chrome', 'grey', 'smoked', 'red', 'grille', 'mesh'];   // same names as src/vehicles/carEnds.js
 const carIndex = readJson('public/content/cars/index.json');
 for (const id of carIndex?.cars || []) {
   const dir = `public/content/cars/${id}`, car = readJson(`${dir}/car.json`);
@@ -25,6 +26,20 @@ for (const id of carIndex?.cars || []) {
   if (ws < 0) bad(id, 'one station must be marked "ws" (base of the windscreen)');
   else if (!(st[ws + 1]?.[2] > 0)) bad(id, 'the station after "ws" needs a roof height (3rd number)');
   if (car.frontOverhang + car.wheelbase >= car.length) bad(id, 'frontOverhang + wheelbase must be shorter than the car');
+  // Optional shape lists: side windows, door cuts, and the parts drawn on the nose and tail.
+  const inside = (t) => isNumber(t) && t >= 0 && t <= 1;
+  for (const rows of car.windows || []) {
+    if (!Array.isArray(rows) || rows.length < 2 || !rows.every((row) => inside(row[0]))) bad(id, 'each of "windows" needs 2 or more rows [t, lo, hi] with t between 0 and 1');
+    else if (rows.some((row, k) => k > 0 && row[0] <= rows[k - 1][0])) bad(id, 'the rows of a window must run from front to back (t increasing)');
+  }
+  if (car.doorLines && !(car.doorLines.length >= 2 && car.doorLines.every(inside))) bad(id, '"doorLines" needs 2 or more positions between 0 and 1');
+  for (const end of ['nose', 'tail']) {
+    for (const part of car[end] || []) {
+      if (!PART_KINDS.includes(part.is)) bad(id, `"${end}": unknown part "${part.is}" (use one of ${PART_KINDS.join(', ')})`);
+      const numbers = part.box || part.circle || (part.rows || []).flat();
+      if (!numbers.length || !numbers.every(isNumber) || (part.box && part.box.length !== 4) || (part.circle && part.circle.length !== 3)) bad(id, `"${end}": a "${part.is}" part needs "box": [from, to, bottom, top], "circle": [s, y, radius] or "rows": [[s, bottom, top], ...]`);
+    }
+  }
   if (car.model && !fs.existsSync(`${dir}/${car.model.file}`)) bad(id, `model file "${car.model.file}" not found`);
   if (car.role === 'hero') {
     if (!Array.isArray(car.engine?.torque) || car.engine.torque.length < 3) bad(id, 'hero cars need engine.torque with at least 3 [rpm, Nm] points');

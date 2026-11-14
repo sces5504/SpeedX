@@ -265,18 +265,23 @@ export function buildInterior(car, mirrorTexture) {
 
   // ---- The shell round you: floor, doors, pillars, roof, the wall behind -----------------
   put(new THREE.Mesh(new THREE.BoxGeometry(spec.width - 0.1, 0.03, backZ - cowlZ), carpet), 0, floorY, (backZ + cowlZ) / 2);
-  put(new THREE.Mesh(new THREE.BoxGeometry(spec.width - 0.1, deckY - floorY, 0.08), cloth), 0, (deckY + floorY) / 2, backZ + 0.02);          // rear seat back / bulkhead
-  put(new THREE.Mesh(new THREE.BoxGeometry(spec.width - 0.12, 0.03, Math.max(0.05, deckZ - backZ)), carpet), 0, deckY - 0.03, (deckZ + backZ) / 2);   // parcel shelf
+  // (both a little narrower than the cabin: up here the body sides lean in, and they must not poke through)
+  put(new THREE.Mesh(new THREE.BoxGeometry(spec.width - 0.26, deckY - floorY, 0.08), cloth), 0, (deckY + floorY) / 2, backZ + 0.02);         // rear seat back / bulkhead
+  put(new THREE.Mesh(new THREE.BoxGeometry(spec.width - 0.28, 0.03, Math.max(0.05, deckZ - backZ)), carpet), 0, deckY - 0.03, (deckZ + backZ) / 2);   // parcel shelf
   put(new THREE.Mesh(new THREE.BoxGeometry(roofHalf * 2, 0.04, roofEndZ - roofZ + 0.1), headlining), 0, roofY - 0.035, (roofEndZ + roofZ) / 2);   // roof lining
-  const beltAt = (z) => THREE.MathUtils.lerp(cowlY, deckY, THREE.MathUtils.clamp((z - cowlZ) / (deckZ - cowlZ), 0, 1));    // height of the window sill
+  // Height of the window sill at z: the shoulder line of the body, read off the car's stations.
+  const beltAt = (z) => {
+    const t = THREE.MathUtils.clamp((z - dims.frontZ) / L, 0, 1), k = Math.max(1, st.findIndex((row) => row[0] >= t));
+    return THREE.MathUtils.lerp(st[k - 1][1], st[k][1], (t - st[k - 1][0]) / (st[k][0] - st[k - 1][0]));
+  };
   const pillarB = at(THREE.MathUtils.lerp(roofFront[0], roofBack[0], 0.46));
   for (const s of [-1, 1]) {
     const wall = s * (halfW - 0.075);
     // door panel up to the window sill, with a padded top, an armrest and a pull handle
     const doorLength = backZ - cowlZ - 0.02, doorZ = (backZ + cowlZ) / 2 + 0.02, sill = beltAt(doorZ) - 0.015;
     put(new THREE.Mesh(new THREE.BoxGeometry(0.04, sill - floorY, doorLength), vinyl), wall, (sill + floorY) / 2, doorZ);
-    const roll = put(soft(0.1, 0.07, doorLength, vinyl, 0.03), wall, sill - 0.01, doorZ);
-    roll.rotation.x = -Math.atan2(deckY - cowlY, deckZ - cowlZ);
+    const roll = put(soft(0.1, 0.07, doorLength, vinyl, 0.03), wall - s * 0.02, sill - 0.035, doorZ);       // (kept under the sill and inside the door skin)
+    roll.rotation.x = -Math.atan2(beltAt(backZ) - beltAt(cowlZ), backZ - cowlZ);
     put(soft(0.085, 0.05, 0.46, cloth, 0.022), wall - s * 0.05, seatY + 0.2, eye.z - 0.12);                    // armrest
     put(new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.2, doorLength * 0.62), fabric), wall - s * 0.024, seatY + 0.36, doorZ - 0.05);   // cloth insert
     put(new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.01, doorLength * 0.62), accent), wall - s * 0.025, seatY + 0.47, doorZ - 0.05);  // coloured line above it
@@ -285,7 +290,7 @@ export function buildInterior(car, mirrorTexture) {
     // pillars: A (beside the windscreen), B (behind your shoulder), C (beside the rear window)
     group.add(stick(V(s * (halfW - 0.06), cowlY, cowlZ + 0.02), V(s * (roofHalf - 0.03), roofY - 0.02, roofZ), 0.032, headlining));
     group.add(stick(V(s * (halfW - 0.06), beltAt(pillarB), pillarB), V(s * (roofHalf - 0.03), roofY - 0.03, pillarB), 0.035, headlining));
-    group.add(stick(V(s * (halfW - 0.08), deckY, deckZ - 0.05), V(s * (roofHalf - 0.04), roofY - 0.03, roofEndZ), 0.05, headlining));
+    group.add(stick(V(s * (halfW - 0.16), deckY - 0.1, deckZ - 0.1), V(s * (roofHalf - 0.08), roofY - 0.12, roofEndZ - 0.04), 0.04, headlining));   // (well inside and under the body's own C-pillar, so it never pokes through)
     // rail along the edge of the roof above the door, and a sun visor folded up
     group.add(stick(V(s * (roofHalf - 0.03), roofY - 0.025, roofZ), V(s * (roofHalf - 0.03), roofY - 0.025, roofEndZ), 0.028, headlining));
     put(soft(0.34, 0.014, 0.13, headlining, 0.006), s * halfW * 0.44, roofY - 0.05, roofZ + 0.1).rotation.x = 0.12;
