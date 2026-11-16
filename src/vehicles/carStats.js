@@ -11,11 +11,13 @@
 // Two things use this file, so their numbers can never disagree:
 //   tools/physics-test.mjs     prints every hero car's figures in the terminal
 //   src/catalog/carsPage.js    shows them on the catalogue page
+//   src/vehicles/carRating.js  turns them into the three ability bars and the 1-999 rating
 //
 // No graphics, no files, no browser: plain numbers in, plain numbers out.
 // Only "hero" cars can be measured (traffic cars have no engine data).
 // ---------------------------------------------------------------------------
 import { createVehicle, stepVehicle } from './vehiclePhysics.js';
+import { clamp } from '../core/mathUtils.js';
 
 const DT = 1 / 240;                   // the game's physics rate (60 fps x 4 substeps)
 const FLAT = { grip: 1, slopeForward: 0, slopeRight: 0, extraDrag: 0 };   // level, dry asphalt
@@ -45,10 +47,11 @@ const slideAngle = (v) => Math.abs(Math.atan2(v.sideSpeed, Math.abs(v.forwardSpe
 // ---- Straight line: acceleration, top speed, braking --------------------------------
 export function measureStraightLine(spec) {
   // Flat out from a standstill for a minute.
-  let v = createVehicle(spec), t100 = null, t160 = null;
+  let v = createVehicle(spec), t100 = null, t160 = null, t400m = null;
   drive(v, () => ({ throttle: 1, brake: 0, steer: 0, handbrake: false }), 60, (t, v) => {
     if (!t100 && v.speed >= 27.78) t100 = t;
     if (!t160 && v.speed >= 44.44) t160 = t;
+    if (!t400m && -v.z >= 400) t400m = t;           // (forward is -Z, and the car started at 0)
   });
   const top = v.speed * KMH, topGear = v.gear;
   // Full brakes from 100 km/h.
@@ -57,9 +60,23 @@ export function measureStraightLine(spec) {
   drive(v, () => ({ throttle: 0, brake: 1, steer: 0, handbrake: false }), 10, (t, v) => v.speed > 0.3 && v.gear !== -1);
   return {
     t100, t160,                       // seconds to 100 and 160 km/h (null = never got there)
+    t400m,                            // seconds to cover the first 400 metres
     top, topGear,                     // km/h after a minute flat out, and the gear it was in
     brakeDist: Math.abs(v.z - z0),    // metres to stop from 100 km/h
   };
+}
+
+// ---- Grip: how hard the tyres corner, whatever the engine ---------------------------------
+// Full steering at 100 km/h while the throttle only holds that speed; the sideways g is
+// averaged from 1.5 to 3.5 seconds in. (A strong engine cannot push this number up and a weak
+// one does not pull it down, which is what the HANDLING bar needs.)
+export function measureGrip(spec) {
+  const speed = 27.78, v = rollingCar(spec, speed, 3);
+  let sum = 0, count = 0;
+  drive(v, (t, v) => ({ throttle: clamp((speed - v.speed) * 0.6, 0, 1), brake: 0, steer: t > 0.5 ? 1 : 0, handbrake: false }), 3.5, (t, v) => {
+    if (t > 1.5) { sum += Math.abs(v.accelLat) / 9.81; count++; }
+  });
+  return { gripG: sum / count };       // steady cornering grip at 100 km/h, in g
 }
 
 // ---- Cornering: grip, and whether the tail stays in line ----------------------------
@@ -79,7 +96,7 @@ export function measureCornering(spec) {
     if (slideAngle(v) > 1.3) spunPower = true;
   });
   return {
-    latG,                                               // steady cornering grip, in g
+    latG,                                               // sideways g in that corner (it rises with speed, so a strong engine reads higher)
     maxSlide: maxSlide * DEGREES, spun,                 // biggest slide angle on the way (degrees); spun = it went round
     powerSlide: powerSlide * DEGREES, spunPower,        // the same with the throttle floored
   };
@@ -120,7 +137,15 @@ export function measureHandling(spec) {
   };
 }
 
+// Peak engine power in watts, read off the torque curve (power = torque x speed of rotation).
+// These are the engine's own figures, before PHYSICS.powerBoost.
+const WATTS_PER_PS = 735.5;           // one metric horsepower
+export function peakPower(spec) {
+  return Math.max(...spec.engine.torque.map(([rpm, nm]) => (nm * rpm * 2 * Math.PI) / 60));
+}
+export const peakPowerPs = (spec) => peakPower(spec) / WATTS_PER_PS;
+
 // Everything at once.
 export function measureCar(spec) {
-  return { ...measureStraightLine(spec), ...measureCornering(spec), ...measureHandling(spec) };
+  return { ...measureStraightLine(spec), ...measureGrip(spec), ...measureCornering(spec), ...measureHandling(spec) };
 }

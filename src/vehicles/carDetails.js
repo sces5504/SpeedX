@@ -228,13 +228,18 @@ export function addBodyDetails(body, surface, spec, dims, paint) {
   if (hero) {
     // sports cars: a lip under the front bumper...
     const noseZ = dims.frontZ, low = spec.clearance + 0.07;
-    const lip = new THREE.Mesh(new RoundedBoxGeometry(dims.halfW * 1.62, 0.035, 0.16, 2, 0.015), rubber);
-    lip.position.set(0, low - 0.01, noseZ + 0.07);
+    // ("lip": metres it pokes out ahead of the bumper - a splitter; 0 or nothing = tucked under it)
+    const out = spec.lip ?? 0;
+    const lip = new THREE.Mesh(new RoundedBoxGeometry(dims.halfW * (out ? 1.78 : 1.62), 0.035, 0.16 + out, 2, 0.015), rubber);
+    lip.position.set(0, low - 0.01, noseZ + 0.07 - out / 2);
     body.add(lip);
-    // ...and the exhaust: one pipe (or two, "exhausts": 2 in car.json) poking out under the rear bumper
-    const pipes = spec.exhausts === 2 ? [-0.5, 0.5] : [0.52];
+    // ...and the exhaust under the rear bumper. "exhausts" in car.json: 1 (one pipe, the default), 2 (one each
+    // side), "centre" (two together in the middle), "quad" (two each side) or 0 (none: the car draws its own in
+    // its "tail" list). Fractions of the half width.
+    const pipes = { 0: [], 2: [-0.5, 0.5], centre: [-0.09, 0.09], quad: [-0.62, -0.46, 0.46, 0.62] }[spec.exhausts] || [0.52];
+    const bore = spec.exhausts === 'centre' || spec.exhausts === 'quad' ? 0.046 : 0.036;
     for (const x of pipes) {
-      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.16, 14, 1, true).rotateX(Math.PI / 2), pipeMetal);
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(bore, bore, 0.16, 14, 1, true).rotateX(Math.PI / 2), pipeMetal);
       pipe.position.set(x * dims.halfW, low + 0.03, dims.rearZ - 0.03);
       body.add(pipe);
     }

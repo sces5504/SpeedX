@@ -9,11 +9,15 @@
 //
 // race.state:  'none' -> 'invite' -> 'countdown' -> 'racing' -> 'done' -> 'none'
 //
-// SKILL. Every rival has a level from 1 (Sunday driver) to 10 (touge legend),
-// picked around GAMEPLAY.rivalLevel each time one appears. skillOf() below
-// turns the level into what the driver actually does differently: how fast
-// they dare take a bend, how late they brake, how small a gap in the oncoming
-// traffic they will overtake into, how tidy their line is.
+// CAR and DRIVER are two separate things:
+//   * What the CAR can do comes from its finished setup (vehicles/carSetup.js), measured
+//     the same way as the player's car (vehicles/carRating.js -> `limits`): cornering
+//     grip, braking, top speed, engine power. A faster car makes a faster rival.
+//   * SKILL is how much of that the DRIVER uses. Every rival has a level from 1 (Sunday
+//     driver) to 10 (touge legend), picked around GAMEPLAY.rivalLevel each time one
+//     appears. skillOf() below turns the level into what the driver does differently:
+//     the share of the car's grip and brakes they dare use, how small a gap in the
+//     oncoming traffic they will overtake into, how tidy their line is.
 //   * They weave through traffic: overtake when the other lane is clear, and
 //     if they are about to run into the back of someone they DODGE — into the
 //     other lane, or round the outside on the shoulder.
@@ -25,6 +29,9 @@
 import { GAMEPLAY, PHYSICS } from '../config.js';
 import { clamp, lerp, smoothstep } from '../core/mathUtils.js';
 import { HERO_CARS } from '../vehicles/carSpecs.js';
+import { setupCar } from '../vehicles/carSetup.js';
+import { rateCar } from '../vehicles/carRating.js';
+import { peakPower } from '../vehicles/carStats.js';
 import { createAiCar, placeAi, removeAi, moveAi, safeSpeed, findAhead, signalSpeed } from './aiCar.js';
 
 // Which way "the inside of a bend" is in the road's own left/right numbering (see think()).
@@ -35,8 +42,8 @@ export function skillOf(level) {
   const t = (clamp(level, 1, 10) - 1) / 9;
   return {
     level,
-    cornerGrip: lerp(9, 17.5, t),     // sideways m/s² they dare in a race (your own tyres give up at about 22)
-    braking: lerp(7, 12.5, t),        // m/s² they plan their braking with: higher = brakes later
+    cornering: lerp(0.42, 0.8, t),    // share of the car's cornering grip they dare use in a race
+    braking: lerp(0.46, 0.82, t),     // share of the car's braking they plan with: higher = brakes later
     power: lerp(0.7, 1, t),           // share of the engine's power they really use
     cruise: lerp(1.3, 1.9, t),        // times the speed limit when they are just driving around
     cruiseGrip: lerp(4.5, 9, t),      // sideways m/s² when just driving around
@@ -53,10 +60,10 @@ export function createRivals(scene, map, playerCarId) {
   const ids = Object.keys(HERO_CARS).filter((id) => id !== playerCarId);
   const cars = [];
   for (let k = 0; k < GAMEPLAY.rivalCount; k++) {
-    const id = ids[k % ids.length], spec = HERO_CARS[id];
+    const id = ids[k % ids.length], spec = setupCar(HERO_CARS[id]);      // (a rival's car is the factory one, for now)
     const ai = createAiCar(scene, id, spec, 'rival');
-    // Peak engine power in watts, for how hard the rival can accelerate.
-    ai.power = Math.max(...spec.engine.torque.map(([rpm, nm]) => (nm * rpm * 2 * Math.PI) / 60)) * 0.85;
+    ai.limits = rateCar(spec).limits;            // what this car can do: cornering and braking in m/s², top speed in m/s
+    ai.power = peakPower(spec) * 0.85;           // watts that reach the road, for how hard it can accelerate
     ai.skill = skillOf(GAMEPLAY.rivalLevel);     // a new level is drawn every time this rival appears (spawn)
     ai.lane = 1;                                 // keeps to the right-hand lane where there are two (see think)
     ai.overtaking = false;
@@ -183,10 +190,11 @@ export function createRivals(scene, map, playerCarId) {
       // Rubber band (see the top of this file). lead: + = the rival is ahead of you.
       const lead = map.ahead(playerInfo.s, ai.s) * ai.dir;
       const band = lead < -40 ? k.catchUp * smoothstep(40, 160, -lead) : lead > 90 ? -0.08 : 0;
-      want = safeSpeed(map, ai, 260, k.cornerGrip * grip * (1 + band), k.braking * grip);
+      const car = ai.limits;
+      want = Math.min(car.topSpeed, safeSpeed(map, ai, 260, car.cornering * k.cornering * grip * (1 + band), car.braking * k.braking * grip));
       const push = (ai.power * PHYSICS.powerBoost * k.power * (1 + band * 1.5)) / (ai.spec.mass * Math.max(ai.speed, 9));
       ai.maxAccel = Math.max(0.3, Math.min(8.5 * grip, push) - drag * 0.8);
-      ai.maxBrake = (k.braking + 2.5) * grip;
+      ai.maxBrake = car.braking * (k.braking + 0.16) * grip;      // in an emergency they find a little more than they plan with
     } else {
       ai.cruise = map.at(map.road.limit, ai.s) * (ai.pace || 1);            // the limit of this stretch of road
       want = Math.min(ai.cruise, safeSpeed(map, ai, 130, k.cruiseGrip * grip, 4.5), signalSpeed(map, ai, 4));     // (out of a race, a racer waits at red lights too)

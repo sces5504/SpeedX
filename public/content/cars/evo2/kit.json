@@ -1,0 +1,65 @@
+{
+  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json."],
+  "groups": [
+    { "id": "frontBumper", "title": "FRONT BUMPER", "options": [
+      { "id": "evo2-front-dtm", "look": { "lip": 0.09, "nose": { "bumper": [
+        {"is": "black", "box": [0, 1.15, 0.505, 0.55], "round": 0.005},
+        {"is": "black", "box": [0, 0.56, 0.22, 0.44], "round": 0.04},
+        {"is": "mesh", "box": [0, 0.52, 0.24, 0.42], "round": 0.03},
+        {"is": "black", "box": [0.62, 0.86, 0.24, 0.42], "round": 0.04},
+        {"is": "mesh", "box": [0.64, 0.84, 0.26, 0.4], "round": 0.03},
+        {"is": "black", "rows": [[0.72, 0.44, 0.456], [0.94, 0.49, 0.506]]}
+      ] } } },
+      { "id": "evo2-front-clean", "look": { "lip": 0.03, "nose": { "bumper": [
+        {"is": "black", "box": [0, 0.44, 0.25, 0.4], "round": 0.03},
+        {"is": "grille", "box": [0, 0.4, 0.27, 0.38], "round": 0.02},
+        {"is": "reverse", "circle": [0.66, 0.33, 0.04]}
+      ] } } }
+    ] },
+    { "id": "rearBumper", "title": "REAR BUMPER", "options": [
+      { "id": "evo2-rear-diffuser", "look": { "tail": { "bumper": [
+        {"is": "black", "box": [0, 1.1, 0.51, 0.555], "round": 0.005},
+        {"is": "black", "box": [0, 0.74, 0.2, 0.39], "round": 0.03},
+        {"is": "grille", "box": [0, 0.58, 0.215, 0.365], "round": 0.02}
+      ] } } },
+      { "id": "evo2-rear-clean", "look": { "tail": { "bumper": [
+        {"is": "black", "box": [0.3, 0.66, 0.22, 0.3], "round": 0.03}
+      ] } } }
+    ] },
+    {"use": "skirts", "without": ["skirts-blade"]},
+    {"use": "canards"},
+    { "id": "headlights", "title": "HEADLIGHTS", "options": [
+      { "id": "evo2-head-quad", "look": { "nose": { "lamps": [
+        {"is": "black", "box": [0.34, 0.87, 0.64, 0.79], "round": 0.015},
+        {"is": "head", "circle": [0.43, 0.715, 0.06]},
+        {"is": "head", "circle": [0.575, 0.715, 0.06]},
+        {"is": "signal", "box": [0.67, 0.86, 0.66, 0.77], "round": 0.012}
+      ] } } },
+      { "id": "evo2-head-smoked", "look": { "nose": { "lamps": [
+        {"is": "smoked", "box": [0.34, 0.87, 0.64, 0.79], "round": 0.015},
+        {"is": "head", "circle": [0.5, 0.715, 0.04]},
+        {"is": "signal", "box": [0.72, 0.86, 0.69, 0.74], "round": 0.01}
+      ] } } }
+    ] },
+    { "id": "taillights", "title": "TAIL LIGHTS", "options": [
+      { "id": "evo2-tail-smoked", "look": { "tail": { "lamps": [
+        {"is": "smoked", "box": [0.3, 0.86, 0.695, 0.855], "round": 0.012},
+        {"is": "brake", "box": [0.42, 0.84, 0.76, 0.8], "round": 0.008},
+        {"is": "signal", "box": [0.66, 0.84, 0.715, 0.745], "round": 0.008},
+        {"is": "reverse", "box": [0.42, 0.6, 0.715, 0.745], "round": 0.008}
+      ] } } },
+      { "id": "evo2-tail-clear", "look": { "tail": { "lamps": [
+        {"is": "chrome", "box": [0.3, 0.86, 0.695, 0.855], "round": 0.012},
+        {"is": "brake", "box": [0.42, 0.655, 0.71, 0.84], "round": 0.01},
+        {"is": "signal", "box": [0.67, 0.85, 0.71, 0.84], "round": 0.01},
+        {"is": "reverse", "box": [0.31, 0.4, 0.71, 0.84], "round": 0.01}
+      ] } } }
+    ] },
+    {"use": "hood"},
+    {"use": "roofScoop"},
+    {"use": "exhaust", "without": ["exhaust-single"]},
+    {"use": "spoiler"},
+    {"use": "rims"},
+    {"use": "livery"}
+  ]
+}

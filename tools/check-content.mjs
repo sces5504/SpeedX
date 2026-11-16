@@ -8,8 +8,43 @@ const bad = (where, message) => problems.push(`${where}: ${message}`);
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file)); } catch (e) { bad(file, 'missing or not valid JSON (' + e.message + ')'); return null; } };
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 
+// ---- Engines and names (hero cars use both) ---------------------------------------------
+const engines = readJson('public/content/engines.json')?.engines || {};
+const names = readJson('public/content/names.json') || {};
+for (const [id, engine] of Object.entries(engines)) {
+  if (!Array.isArray(engine.torque) || engine.torque.length < 3) bad('engines/' + id, 'needs "torque" with at least 3 [rpm, Nm] points');
+  else if (engine.torque.some((point, k) => k > 0 && point[0] <= engine.torque[k - 1][0])) bad('engines/' + id, '"torque" points must run from low rpm to high rpm');
+  if (!isNumber(engine.idle) || !isNumber(engine.redline)) bad('engines/' + id, 'needs "idle" and "redline"');
+  for (const key of ['layout', 'aspiration', 'sound']) if (typeof engine[key] !== 'string') bad('engines/' + id, `needs "${key}"`);
+  if (!names.engines?.[id]?.name) bad('engines/' + id, 'has no name in names.json (players would see its id)');
+}
+
+// ---- Performance parts ----------------------------------------------------------------------
+const upgrades = readJson('public/content/upgrades.json') || {};
+const EFFECTS = ['torque', 'redline', 'boost', 'spool', 'size', 'kind', 'mass', 'grip', 'brakeG', 'shiftTime', 'extraGear', 'efficiency'];   // what src/vehicles/carSetup.js applies
+const partIds = new Set();
+for (const group of upgrades.groups || []) {
+  for (const option of group.options || []) {
+    const where = `upgrades/${group.id}/${option.id}`;
+    if (partIds.has(option.id)) bad(where, 'two options share this id'); partIds.add(option.id);
+    for (const key of Object.keys(option)) if (key !== 'id' && !EFFECTS.includes(key)) bad(where, `"${key}" is not something a part can change (allowed: ${EFFECTS.join(', ')})`);
+    if (option.boost && !['turbo', 'supercharger'].includes(option.kind)) bad(where, 'an option with "boost" needs "kind": "turbo" or "supercharger"');
+    if (option.kind === 'turbo' && !isNumber(option.spool)) bad(where, 'a turbo needs "spool" (rpm)');
+    if (!names.parts?.[option.id]?.name) bad(where, 'has no name in names.json (players would see its id)');
+  }
+}
+const { ENGINE_PROFILES, VOICES } = await import('../src/audio/audio.js');
+const clipList = readJson('public/audio/clips.json') || {};
+for (const [name, voice] of Object.entries(VOICES)) for (const entry of voice) if (!clipList[[].concat(entry)[0]]) bad('audio voice ' + name, `clip "${[].concat(entry)[0]}" is not in public/audio/clips.json`);
+for (const [name, profile] of Object.entries(ENGINE_PROFILES)) if (!VOICES[profile.voice]) bad('audio profile ' + name, `there is no voice "${profile.voice}"`);
+for (const [id, engine] of Object.entries(engines)) {
+  if (!ENGINE_PROFILES[engine.sound]) bad('engines/' + id, `"sound": there is no profile "${engine.sound}" in src/audio/audio.js`);
+  if (!isNumber(engine.mass)) bad('engines/' + id, 'needs "mass" (kg)');
+  for (const kind of engine.fits || []) if (!['turbo', 'supercharger'].includes(kind)) bad('engines/' + id, `"fits": unknown kind "${kind}"`);
+}
+
 // ---- Cars ---------------------------------------------------------------------------
-const PART_KINDS = ['head', 'tail', 'brake', 'signal', 'reverse', 'black', 'chrome', 'grey', 'smoked', 'red', 'grille', 'mesh'];   // same names as src/vehicles/carEnds.js
+const PART_KINDS = ['head', 'tail', 'brake', 'signal', 'reverse', 'black', 'chrome', 'grey', 'smoked', 'red', 'grille', 'mesh', 'paint2'];   // same names as src/vehicles/carEnds.js
 const carIndex = readJson('public/content/cars/index.json');
 for (const id of carIndex?.cars || []) {
   const dir = `public/content/cars/${id}`, car = readJson(`${dir}/car.json`);
@@ -40,10 +75,35 @@ for (const id of carIndex?.cars || []) {
       if (!numbers.length || !numbers.every(isNumber) || (part.box && part.box.length !== 4) || (part.circle && part.circle.length !== 3)) bad(id, `"${end}": a "${part.is}" part needs "box": [from, to, bottom, top], "circle": [s, y, radius] or "rows": [[s, bottom, top], ...]`);
     }
   }
+  for (const part of car.side || []) {
+    if (!PART_KINDS.includes(part.is) || !Array.isArray(part.rows) || part.rows.length < 2 || !part.rows.every((row) => row.length === 3 && row.every(isNumber))) bad(id, '"side": each part needs "is" (a finish) and "rows": [[t, low, high], ...] with 2 or more rows');
+  }
   if (car.model && !fs.existsSync(`${dir}/${car.model.file}`)) bad(id, `model file "${car.model.file}" not found`);
+  // Body parts (kit.json): every option needs a name, and may only touch what src/vehicles/carLook.js allows.
+  if (car.kit) {
+    const LOOK = ['flares', 'skirts', 'spoiler', 'exhausts', 'lip', 'wheelOut', 'hood', 'roofScoop', 'rimColor', 'twoTone', 'twoToneZone', 'endLift', 'headlights', 'taillights', 'nose', 'tail', 'side'];
+    const kit = readJson(`${dir}/kit.json`), shared = readJson('public/content/kits.json')?.groups || {};
+    for (const group of kit?.groups || []) if (group.use && !shared[group.use]) bad(`${id}/kit`, `"use": there is no shared group "${group.use}" in content/kits.json`);
+    const groups = (kit?.groups || []).map((group) => (group.use && shared[group.use] ? { ...shared[group.use], options: shared[group.use].options.filter((option) => !group.without?.includes(option.id)) } : group)).filter((group) => group.options), groupIds = groups.map((group) => group.id);
+    for (const group of groups) {
+      for (const option of group.options || []) {
+        const where = `${id}/kit/${option.id}`;
+        if (!names.parts?.[option.id]?.name) bad(where, 'has no name in names.json (players would see its id)');
+        for (const key of Object.keys(option.look || {})) if (!LOOK.includes(key)) bad(where, `"${key}" is not something a body part can change (allowed: ${LOOK.join(', ')})`);
+        for (const blocked of option.blocks || []) if (!groupIds.includes(blocked)) bad(where, `"blocks": there is no group "${blocked}" in this kit`);
+        for (const end of ['nose', 'tail', 'side']) {
+          for (const [slot, parts] of Object.entries(option.look?.[end] || {})) {
+            for (const part of parts) if (!PART_KINDS.includes(part.is)) bad(where, `"${end}": unknown part "${part.is}"`);
+          }
+        }
+      }
+    }
+  }
   if (car.role === 'hero') {
-    if (!Array.isArray(car.engine?.torque) || car.engine.torque.length < 3) bad(id, 'hero cars need engine.torque with at least 3 [rpm, Nm] points');
-    if (!isNumber(car.engine?.idle) || !isNumber(car.engine?.redline)) bad(id, 'hero cars need engine.idle and engine.redline');
+    if (!engines[car.engine]) bad(id, `hero cars need "engine": the id of an engine in engines.json (found ${JSON.stringify(car.engine)})`);
+    if (!names.cars?.[id]?.name) bad(id, 'has no name in names.json (players would see its id)');
+    for (const swap of car.engineSwaps || []) if (!engines[swap]) bad(id, `"engineSwaps": there is no engine "${swap}" in engines.json`);
+    if (car.drive && !['rwd', 'fwd', 'awd'].includes(car.drive)) bad(id, '"drive" must be "rwd", "fwd" or "awd"');
     if (!Array.isArray(car.gears) || car.gears.length < 3 || !isNumber(car.finalDrive)) bad(id, 'hero cars need "gears" (3 or more) and "finalDrive"');
     for (const key of ['frontWeight', 'cgHeight', 'dragArea']) if (!isNumber(car[key])) bad(id, `hero cars need "${key}"`);
     // The look every hero car is held to: its own cabin colours and a finished tail.
@@ -98,6 +158,6 @@ for (const id of mapIndex?.maps || []) {
 }
 for (const [id] of Object.entries(props)) if (!fs.existsSync(`public/content/props/${id}/model.glb`)) bad('props/' + id, 'model.glb not found');
 
-console.log(`cars: ${carIndex?.cars.length || 0}, maps: ${mapIndex?.maps.length || 0}, props: ${Object.keys(props).length}`);
+console.log(`cars: ${carIndex?.cars.length || 0}, engines: ${Object.keys(engines).length}, maps: ${mapIndex?.maps.length || 0}, props: ${Object.keys(props).length}`);
 if (problems.length) { console.error('\n' + problems.map((p) => 'PROBLEM  ' + p).join('\n')); process.exit(1); }
 console.log('All content looks fine.');

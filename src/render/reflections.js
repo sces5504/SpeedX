@@ -33,8 +33,9 @@ export function createCarProbe(renderer, scene) {
      * Photograph one more side of the cube. Call once per frame.
      * @param {THREE.Vector3} centre where the probe sits (the player's car)
      * @param {THREE.Object3D[]} hide things that must not be in the picture (the car itself)
+     * @param {THREE.Scene} [from] photograph this scene instead of the world (the garage's showroom)
      */
-    update(centre, hide = []) {
+    update(centre, hide = [], from = scene) {
       if (SIZE <= 0) return;
       probe.position.copy(centre);
       probe.updateMatrixWorld();
@@ -42,7 +43,7 @@ export function createCarProbe(renderer, scene) {
       for (const object of hide) object.visible = false;
       const previous = renderer.getRenderTarget();
       renderer.setRenderTarget(target, side);
-      renderer.render(scene, probe.children[side]);
+      renderer.render(from, probe.children[side]);
       renderer.setRenderTarget(previous);
       hide.forEach((object, i) => { object.visible = wasVisible[i]; });
       side = (side + 1) % 6;

@@ -1,0 +1,40 @@
+{
+  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json."],
+  "groups": [
+    { "id": "frontBumper", "title": "FRONT BUMPER", "options": [
+      { "id": "veyron-front-ss", "look": { "lip": 0.05, "nose": { "bumper": [
+        {"is": "black", "rows": [[0.26, 0.2, 0.36], [0.34, 0.2, 0.45], [0.86, 0.2, 0.45], [0.94, 0.26, 0.4]]},
+        {"is": "mesh", "rows": [[0.3, 0.22, 0.36], [0.37, 0.22, 0.43], [0.83, 0.22, 0.43], [0.9, 0.27, 0.39]]},
+        {"is": "black", "box": [0, 0.24, 0.2, 0.34], "round": 0.03},
+        {"is": "mesh", "box": [0, 0.21, 0.215, 0.325], "round": 0.02}
+      ] } } }
+    ] },
+    { "id": "rearBumper", "title": "REAR BUMPER", "options": [
+      { "id": "veyron-rear-ss", "look": { "tail": { "bumper": [
+        {"is": "black", "box": [0, 0.84, 0.18, 0.58], "round": 0.05},
+        {"is": "mesh", "box": [0.36, 0.78, 0.4, 0.56], "round": 0.03},
+        {"is": "grille", "box": [0.36, 0.8, 0.2, 0.36], "round": 0.02},
+        {"is": "chrome", "box": [0, 0.3, 0.21, 0.36], "round": 0.03},
+        {"is": "black", "box": [0, 0.27, 0.23, 0.34], "round": 0.02}
+      ] } } }
+    ] },
+    { "id": "headlights", "title": "HEADLIGHTS", "options": [
+      { "id": "veyron-head-led", "look": { "nose": { "lamps": [
+        {"is": "black", "rows": [[0.52, 0.585, 0.66], [0.66, 0.59, 0.69], [0.84, 0.61, 0.7], [0.9, 0.64, 0.69]]},
+        {"is": "head", "box": [0.56, 0.84, 0.652, 0.672], "round": 0.006},
+        {"is": "signal", "box": [0.6, 0.82, 0.618, 0.632], "round": 0.004}
+      ] } } }
+    ] },
+    { "id": "taillights", "title": "TAIL LIGHTS", "options": [
+      { "id": "veyron-tail-bar", "look": { "tail": { "lamps": [
+        {"is": "black", "box": [0, 0.88, 0.61, 0.79], "round": 0.06},
+        {"is": "brake", "box": [0.1, 0.82, 0.69, 0.712], "round": 0.008},
+        {"is": "signal", "box": [0.6, 0.82, 0.65, 0.668], "round": 0.006},
+        {"is": "reverse", "box": [0.3, 0.5, 0.65, 0.668], "round": 0.006},
+        {"is": "red", "box": [0, 0.3, 0.8, 0.815], "round": 0.006}
+      ] } } }
+    ] },
+    {"use": "spoiler", "without": ["wing-none", "wing-gt", "wing-gt-low", "wing-gt-high"]},
+    {"use": "rims"}
+  ]
+}

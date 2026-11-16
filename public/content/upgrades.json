@@ -1,0 +1,58 @@
+{
+  "about": [
+    "PERFORMANCE PARTS. Each group is one slot on the car; a car has at most one option from a group fitted.",
+    "Options are listed from mild to wild. Nothing fitted = the factory part.",
+    "\"perEngine\": true  -> the choice belongs to the ENGINE: swap the engine and the other engine keeps its own parts.",
+    "What an option may change (src/vehicles/carSetup.js applies them, nothing else is allowed):",
+    "  torque      x  the whole torque curve",
+    "  redline     +  rpm: the top of the curve is stretched up to the new red line",
+    "  boost       forced induction: torque x (1 + boost). A turbo gives it from \"spool\" rpm upward",
+    "              (less below: lag); a supercharger gives it everywhere. \"kind\" must be one the engine",
+    "              lists under \"fits\" in engines.json. An engine that is turbocharged from the factory",
+    "              only gets \"factoryTurboShare\" of the boost (the kit replaces the turbo it already has).",
+    "              \"size\": how big the turbo sounds (1 = normal; bigger = louder, lower whistle and blow-off).",
+    "  mass        x  the car's weight        grip    x  tyre grip        brakeG  x  braking force",
+    "  shiftTime   =  seconds without drive during a gear change (factory: 0.14)",
+    "  extraGear   adds one more gear on top: that ratio = the old top gear x this number",
+    "  efficiency  =  share of engine power that reaches the wheels (factory: 0.88)",
+    "The names players see are in names.json under \"parts\"."
+  ],
+  "factoryTurboShare": 0.6,
+  "groups": [
+    { "id": "internals", "title": "ENGINE", "perEngine": true, "options": [
+      { "id": "internals-1", "torque": 1.06 },
+      { "id": "internals-2", "torque": 1.12, "redline": 300 },
+      { "id": "internals-3", "torque": 1.18, "redline": 600 }
+    ] },
+    { "id": "induction", "title": "TURBO / SUPERCHARGER", "perEngine": true, "options": [
+      { "id": "turbo-single", "kind": "turbo", "boost": 0.45, "spool": 4600, "size": 1.4 },
+      { "id": "turbo-twin", "kind": "turbo", "boost": 0.34, "spool": 3000, "size": 0.8 },
+      { "id": "charger", "kind": "supercharger", "boost": 0.27 }
+    ] },
+    { "id": "ecu", "title": "ECU", "perEngine": true, "options": [
+      { "id": "ecu-1", "torque": 1.03 },
+      { "id": "ecu-2", "torque": 1.05 },
+      { "id": "ecu-3", "torque": 1.08, "redline": 200 }
+    ] },
+    { "id": "gearbox", "title": "GEARBOX", "options": [
+      { "id": "gearbox-1", "shiftTime": 0.10 },
+      { "id": "gearbox-2", "shiftTime": 0.07, "extraGear": 0.82 },
+      { "id": "gearbox-3", "shiftTime": 0.04, "extraGear": 0.82, "efficiency": 0.92 }
+    ] },
+    { "id": "brakes", "title": "BRAKES", "options": [
+      { "id": "brakes-1", "brakeG": 1.06 },
+      { "id": "brakes-2", "brakeG": 1.12 },
+      { "id": "brakes-3", "brakeG": 1.18 }
+    ] },
+    { "id": "weight", "title": "WEIGHT REDUCTION", "options": [
+      { "id": "weight-1", "mass": 0.97 },
+      { "id": "weight-2", "mass": 0.94 },
+      { "id": "weight-3", "mass": 0.90 }
+    ] },
+    { "id": "tyres", "title": "TYRES", "options": [
+      { "id": "tyres-1", "grip": 1.04 },
+      { "id": "tyres-2", "grip": 1.08 },
+      { "id": "tyres-3", "grip": 1.12 }
+    ] }
+  ]
+}

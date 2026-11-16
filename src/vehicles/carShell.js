@@ -41,8 +41,12 @@ export const U = { sill: 3.35, waist: 5, shoulder: 8, glassLow: 9, glassHigh: 10
  *   surface   see makeSurface() below
  */
 export function makeShell(spec, dims) {
-  const rings = makeRings(spec, dims);
-  for (const ring of rings) ring.half = ringPoints(ring, spec);
+  const rings = makeRings(spec, dims), cowl = spec.stations.find((s) => s[4] === 'ws')[0];
+  for (const ring of rings) {
+    ring.half = ringPoints(ring, spec);
+    ring.zone = spec.twoToneZone;                       // two-tone cars: where the second colour goes (see secondColour)
+    ring.bonnet = ring.t < cowl;
+  }
   return { geometry: shellGeometry(rings), surface: makeSurface(rings, spec, dims) };
 }
 
@@ -70,7 +74,7 @@ function shellGeometry(rings) {
   for (const [i, facesBack] of [[0, false], [rings.length - 1, true]]) {
     for (let j = 0; j < ACROSS - 1; j++) {
       const A = vertex(i, j, 1), B = vertex(i, j + 1, 1), C = vertex(i, j, -1), D = vertex(i, j + 1, -1);
-      const list = lists[j < 3 ? MATERIALS.trim : j <= 4 ? MATERIALS.lower : MATERIALS.paint];
+      const list = lists[j < 3 ? MATERIALS.trim : secondColour(rings[i], j) ? MATERIALS.lower : MATERIALS.paint];
       if (facesBack) list.push(A, B, C, B, D, C); else list.push(A, C, B, B, C, D);
     }
   }
@@ -413,12 +417,24 @@ function ringPoints(ring, spec) {
 
 // ---- 3. What each patch of skin is made of ------------------------------------------
 // j = the patch between point j and point j + 1, from this ring to the next one.
+// Where a two-tone car wears its second colour ("twoTone" in car.json), by "twoToneZone":
+//   (none)   the sill and lower door
+//   "top"    a band over the middle of the bonnet, roof and tail (over the cabin it takes the
+//            pillars and the edge of the roof too)
+//   "hood"   the bonnet alone (a carbon bonnet)
+// (That paint is the material called `lower`, wherever it is.)
+function secondColour(ring, j) {
+  if (ring.zone === 'top') return j >= (ring.top - ring.belt > 0.055 ? 10 : 12);
+  if (ring.zone === 'hood') return ring.bonnet && j >= 10;
+  return j <= 4;
+}
+
 function patchMaterial(ring, next, j) {
   if (j <= 2 || (ring.arch > 0 && j <= 3)) return MATERIALS.trim;           // underside, inside of the wheel arch
-  if (j <= 4) return MATERIALS.lower;                                       // sill and lower door (two-tone cars)
+  if (j <= 4) return secondColour(ring, j) ? MATERIALS.lower : MATERIALS.paint;   // sill and lower door
   if (j === 9) return ring.window >= 0 && ring.window === next.window ? MATERIALS.glass : MATERIALS.paint;   // side windows
   // Windscreen and rear window. The strip of paint left along the edge of the roof is the
   // A-pillar (front) and C-pillar (rear).
-  if (j >= 12) return (ring.span === 'ws' || ring.span === 'rw') && ring.top - ring.belt > 0.055 ? MATERIALS.glass : MATERIALS.paint;
+  if (j >= 12) return (ring.span === 'ws' || ring.span === 'rw') && ring.top - ring.belt > 0.055 ? MATERIALS.glass : secondColour(ring, j) ? MATERIALS.lower : MATERIALS.paint;
   return MATERIALS.paint;
 }

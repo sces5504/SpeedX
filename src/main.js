@@ -10,7 +10,7 @@
 //   ai/        traffic and rival racers
 //   game/      collisions, near misses, time attack
 //   render/    cameras, materials, post-processing, sparks
-//   audio/     synthesised sound          ui/  HUD, map, menus
+//   audio/     synthesised sound          ui/  HUD, map, menus, garage
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { FEEL, FIRST_TIME, GAMEPLAY, GRAPHICS, ROAD } from './config.js';
@@ -28,7 +28,9 @@ import { drawNear, updateDrawDistance } from './render/drawDistance.js';
 import { loadProps } from './world/props.js';
 import { createSky, NIGHT_PRESETS } from './world/sky.js';
 import { createWeather } from './world/weather.js';
-import { ALL_CARS, HERO_CARS, TRAFFIC_CARS, loadCars } from './vehicles/carSpecs.js';
+import { ALL_CARS, HERO_CARS, TRAFFIC_CARS, finishSpec, loadCars } from './vehicles/carSpecs.js';
+import { setupCar } from './vehicles/carSetup.js';
+import { dressCar } from './vehicles/carLook.js';
 import { preloadCarModels } from './vehicles/carModel.js';
 import { buildCar } from './vehicles/carBuilder.js';
 import { createPlayer } from './vehicles/playerCar.js';
@@ -37,6 +39,7 @@ import { createTraffic } from './ai/traffic.js';
 import { createRivals } from './ai/rivals.js';
 import { collideCars } from './game/collisions.js';
 import { createChallenge } from './game/challenge.js';
+import { save } from './game/save.js';
 import { createCameras } from './render/cameras.js';
 import { createPostFx } from './render/postfx.js';
 import { FILTERS } from './render/filters.js';
@@ -44,10 +47,13 @@ import { createSparks } from './render/sparks.js';
 import { shared, makeHeadlightCookie } from './render/materials.js';
 import { smallLights } from './render/smallLights.js';
 import { createCarProbe } from './render/reflections.js';
-import { createAudio } from './audio/audio.js';
+import { createAudio, soundOf } from './audio/audio.js';
+import { createRevTest } from './audio/revTest.js';
+import { createShowroom } from './world/showroom.js';
 import { createHud } from './ui/hud.js';
 import { createMapView } from './ui/mapView.js';
 import { createMenu } from './ui/menu.js';
+import { createGarage } from './ui/garage.js';
 
 // ---- Renderer and scene -------------------------------------------------------
 const canvas = document.getElementById('game');
@@ -131,12 +137,17 @@ const startPoi = map.pois.find((poi) => poi.id === map.info.startPoi) || map.poi
 let everDriven = false;
 
 // ---- Starting / changing car ----------------------------------------------------
-function spawnPlayer(carId, colorIndex) {
+// One of the player's cars as it is driven and drawn: the factory car + the performance parts
+// (carSetup.js) + the body parts (carLook.js) kept in the save file. `look`: other body parts
+// to show instead (the garage, trying something on).
+const setupOf = (carId, look = save.car(carId).look) => dressCar(setupCar(HERO_CARS[carId], save.car(carId).build), look);
+
+function spawnPlayer(carId) {
   // Changing car from the pause menu keeps your place on the road; the first start is at the gas station.
   const previous = player && everDriven ? { s: player.s, dir: playerDirection() } : null;
   if (player) player.dispose();
-  if (rivals) for (const ai of rivals.cars) scene.remove(ai.car.group);
-  player = createPlayer(scene, map, carId, colorIndex, rig.mirrorTarget.texture);
+  if (rivals) for (const ai of rivals.cars) ai.car.dispose();
+  player = createPlayer(scene, map, setupOf(carId), save.car(carId).color, rig.mirrorTarget.texture);
   if (previous) player.placeAt(previous.s, map.laneCentre(previous.s, 1), previous.dir);
   else player.placeAt(startPoi.s - 30, startPoi.side * (ROAD.barrierOffset + startPoi.shift + 3), 1);       // start in the gas station lot
   player.update(1 / 60, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);
@@ -178,15 +189,16 @@ const menu = createMenu({
   // Every installed map with its map.json, for the map cards (only the chosen map is actually built).
   maps: await Promise.all(mapList.maps.map(async (id) => ({ id, info: await loadMapInfo(id) }))),
   currentMap: map.id, mapName: map.info.name,
-  onPreview: (carId, colorIndex) => spawnPlayer(carId, colorIndex),
+  onPreview: (carId) => spawnPlayer(carId),
+  onPaint: (colorIndex) => paintPlayer(colorIndex),
   onPickMap: (id, name) => {                                   // maps are built at start-up, so: remember the choice and reload
     localStorage.setItem('speedx-map', id);
     document.body.insertAdjacentHTML('beforeend', `<div id="loading">LOADING ${name.toUpperCase()}…</div>`);
     location.search = '?map=' + id;
   },
-  onStart: (carId, colorIndex) => {
-    if (!player || player.carId !== carId) spawnPlayer(carId, colorIndex);
-    audio.start(player.spec.sound);
+  onStart: (carId) => {
+    if (!player || player.carId !== carId) spawnPlayer(carId);
+    audio.start(soundOf(player.spec));
     state = 'driving'; everDriven = true;
     audio.setPaused(false);
     hud.show(true);
@@ -201,7 +213,74 @@ const menu = createMenu({
     localStorage.setItem('speedx-filter', next.id);
     return next.name;
   },
-  onGarage: () => { setPaused(false); state = 'menu'; hud.show(false); audio.setPaused(true); menu.showMain(); },
+  // The garage is opened from the main menu or from the pause menu. Either way the game goes to
+  // its menu state (the camera circles the car) with the garage screen on top.
+  onOpenGarage: () => {
+    if (state !== 'menu') { setPaused(false); state = 'menu'; hud.show(false); audio.setPaused(true); }
+    menu.hideMain();
+    garage.open();
+    enterShowroom();
+  },
+});
+
+// ---- The garage's bright room (world/showroom.js) ---------------------------------------------
+// While the garage is open the car stands in the showroom scene and the picture is drawn from there.
+const showroom = createShowroom();
+const revTest = createRevTest();          // the engine being revved in the garage (audio/revTest.js)
+let heardSpec = null;                     // the setup whose engine the sound system is playing in the garage
+let lightsBefore = 1;
+function enterShowroom() {
+  lightsBefore = player.lightMode;
+  player.lightMode = 0;                   // lamps off in the bright room (the LIGHTS button switches them on)
+  showroom.show(player.car.group);
+  postfx.setScene(showroom.scene);
+}
+function leaveShowroom() {
+  showroom.hide(scene);
+  showroom.release(rig.camera);
+  postfx.setScene(scene);
+  player.lightMode = lightsBefore;
+  revTest.running = revTest.held = false; revTest.step(0, audio);      // engine off
+  audio.setPaused(true);
+  garage.showRpm(0);
+}
+// One frame of the garage: the camera, and the engine if it is being revved.
+function updateShowroom(dt) {
+  player.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);
+  player.interior.group.visible = false;
+  showroom.update(dt, rig.camera, input.mouse);
+  smallLights.begin(); smallLights.finish();                 // none of the world's lamps reach the showroom
+  player.car.updateLights(dt, rig.camera.position);
+  const spec = garage.trialSpec, pressing = garage.revHeld || input.isHeld('throttle');
+  if (pressing && !revTest.running) revTest.running = true;                 // first press: start the engine
+  if (revTest.running && heardSpec !== spec) {                              // ...and whenever another engine or kit is tried, hear THAT one
+    heardSpec = spec;
+    audio.start(soundOf(spec)).then(() => audio.setPaused(false));
+  }
+  revTest.setEngine(spec.engine);
+  revTest.held = pressing;
+  revTest.step(dt, audio);
+  garage.showRpm(revTest.rpm);
+}
+
+// The same car with other body parts (or the same ones again): the 3D car is built afresh where it stands.
+function redressPlayer(look, colorIndex) {
+  const v = player.vehicle, place = { x: v.x, z: v.z, yaw: v.yaw, roadIndex: v.roadIndex }, lights = player.lightMode, carId = player.carId;
+  player.dispose();
+  player = createPlayer(scene, map, setupOf(carId, look), colorIndex, rig.mirrorTarget.texture);
+  Object.assign(player.vehicle, place);
+  player.lightMode = lights;
+  player.update(1 / 60, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);
+  showroom.show(player.car.group);
+}
+const paintPlayer = (colorIndex) => player.car.setColor(player.spec.colors[colorIndex % player.spec.colors.length]);
+const garage = createGarage({
+  onSwitchCar: (carId) => { spawnPlayer(carId); player.lightMode = 0; showroom.show(player.car.group); },
+  onPaint: paintPlayer,                                        // (also used to show a paint that is only being tried)
+  onLook: redressPlayer,                                       // body parts being tried, or put back
+  onApply: () => player.applySetup(setupOf(player.carId)),     // new parts: the same 3D car drives on with the new numbers
+  onLights: () => { player.lightMode = player.lightMode ? 0 : 1; },
+  onClose: () => { leaveShowroom(); heardSpec = null; menu.showMain(); },
 });
 
 function setPaused(paused) {
@@ -294,14 +373,17 @@ function updateDriving(dt) {
   const pfx = -Math.sin(v.yaw), pfz = -Math.cos(v.yaw), prx = Math.cos(v.yaw), prz = -Math.sin(v.yaw);
   weather.sprayFrom(v.x - pfx * v.rear, v.y, v.z - pfz * v.rear, v.vx, v.vz, v.speed, dt);
   aiCars.forEach((ai, index) => {
-    if (!ai.active) { ai.passArmed = true; return; }
+    if (!ai.active || ai.passArmed === undefined) { ai.passArmed = true; if (!ai.active) return; }
     const relX = ai.x - v.x, relZ = ai.z - v.z, dvx = ai.vx - v.vx, dvz = ai.vz - v.vz;
     const dist = Math.hypot(relX, relZ), closing = Math.hypot(dvx, dvz);
     const pan = clamp((relX * prx + relZ * prz) / 6, -0.8, 0.8);
     if (ai.honk) audio.hornAt(dist, pan);
     if (dist < 130) weather.sprayFrom(ai.x, ai.y, ai.z, ai.vx, ai.vz, ai.speed, dt);
-    if (dist > 50) ai.passArmed = true;
     const untilClosest = closing > 1 ? -(relX * dvx + relZ * dvz) / (closing * closing) : -1;
+    // One whoosh per pass: a car may only whoosh again once it has gone by and is well away.
+    // (Arming it on distance alone made a fast-closing car whoosh again every frame, dozens of
+    // times on top of each other: at speed the whole sound broke up.)
+    if (dist > 50 && untilClosest <= 0) ai.passArmed = true;
     const miss = Math.hypot(relX + dvx * untilClosest, relZ + dvz * untilClosest);
     // The moment a car flashes past close by, its wake shoves the camera and smears the picture.
     const beside = dist < 5.5 && closing > 18;
@@ -356,7 +438,7 @@ function nearestRival(v, rightX, rightZ) {
     const distance = Math.hypot(ai.x - v.x, ai.z - v.z);
     if (distance > 110 || (best && distance > best.distance)) continue;
     best = { distance, side: ((ai.x - v.x) * rightX + (ai.z - v.z) * rightZ) / Math.max(distance, 4),
-      rpm: 2600 + ((ai.speed % 16) / 16) * 4300, throttle: ai.accel > -0.5 ? 0.9 : 0.15, sound: ai.spec.sound };
+      rpm: 2600 + ((ai.speed % 16) / 16) * 4300, throttle: ai.accel > -0.5 ? 0.9 : 0.15, car: (ai.soundCar ??= soundOf(ai.spec)) };
   }
   return best;
 }
@@ -527,6 +609,8 @@ function runFrame(dt) {
     const simDt = dt * (slowMo > 0 ? 0.28 : 1);
     time += simDt;
     updateDriving(simDt);
+  } else if (state === 'menu' && player && garage.isOpen) {
+    updateShowroom(dt);
   } else if (state === 'menu' && player) {
     // Slow orbit around the car behind the menu.
     menuAngle += dt * orbitSpeed;
@@ -548,7 +632,8 @@ function runFrame(dt) {
   updateDrawDistance(rig.camera.position);         // only what is near gets drawn (render/drawDistance.js)
   renderer.shadowMap.needsUpdate = true;
   // Car paint and glass mirror the world around your car (one side of the probe per frame).
-  if (player) carProbe.update(tmp.copy(player.car.group.position).setY(player.car.group.position.y + 1.1), [player.car.group]);
+  const inShowroom = state === 'menu' && garage.isOpen;
+  if (player) carProbe.update(tmp.copy(player.car.group.position).setY(player.car.group.position.y + 1.1), [player.car.group], inShowroom ? showroom.scene : scene);
 
   // Rear-view mirror: a second, tiny render of the scene (every other frame, cockpit only).
   if (player && rig.mode === 'cockpit' && state === 'driving' && frame % 2 === 0) {
@@ -559,7 +644,8 @@ function runFrame(dt) {
     player.car.group.visible = true;
   }
   const cockpit = rig.mode === 'cockpit' && state !== 'menu';
-  postfx.render(dt, { dazzlers, baseExposure: sky.exposure, rain: weather.amount * (cockpit ? 1 : 0.4), inside: cockpit,
+  if (inShowroom) postfx.render(dt, { baseExposure: 1, rain: 0, inside: false, wiper: 0, speed: 0 });      // indoors: no rain on the lens, no glare
+  else postfx.render(dt, { dazzlers, baseExposure: sky.exposure, rain: weather.amount * (cockpit ? 1 : 0.4), inside: cockpit,
     wiper: weather.wiper, speed: state === 'driving' ? rig.speedFactor : 0 });
   input.endFrame();
 }
@@ -579,14 +665,14 @@ function fitToWindow() {
 }
 
 // ---- Go ----------------------------------------------------------------------------
-spawnPlayer(menu.selection.carId, menu.selection.colorIndex);
-menu.showMain();
+menu.showMain();                 // (first, so the save file names a car that is really installed)
+spawnPlayer(save.data.garage.current);
 document.getElementById('loading').remove();
 // Developer helper (used by the add-car skill): type  speedx.preview('camry')  in the browser
 // console while the main menu is open to look at ANY car, lights on, as the camera circles it.
 let previewCar = null;
 function preview(id) {
-  if (previewCar) scene.remove(previewCar.group);
+  if (previewCar) previewCar.dispose();
   previewCar = buildCar(ALL_CARS[id], ALL_CARS[id].colors[0]);
   previewCar.group.position.copy(player.car.group.position);
   previewCar.group.rotation.copy(player.car.group.rotation);
@@ -596,5 +682,5 @@ function preview(id) {
 }
 // speedx.step(120) fast-forwards 120 frames at once (useful when the page is in the background and runs slowly).
 const step = (frames = 60) => { for (let i = 0; i < frames; i++) runFrame(1 / 60); };
-window.speedx = { preview, step, postfx, audio, setOrbit(angle, speed = 0) { menuAngle = angle; orbitSpeed = speed; }, get player() { return player; }, map, rig, sky, weather, traffic, get rivals() { return rivals; }, challenge, scene, renderer };  // handy in the browser console
+window.speedx = { preview, step, postfx, audio, save, garage, showroom, buildCar, finishSpec, setOrbit(angle, speed = 0) { menuAngle = angle; orbitSpeed = speed; }, get player() { return player; }, map, rig, sky, weather, traffic, get rivals() { return rivals; }, challenge, scene, renderer };  // handy in the browser console
 tick();

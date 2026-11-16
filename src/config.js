@@ -102,6 +102,8 @@ export const FIRST_TIME = {
 };
 
 export const GAMEPLAY = {
+  freeParts: true,         // TEST GARAGE: every car and every part that fits can be had for nothing.
+                           // false = the garage asks the shop rules (prices, what is unlocked) once those exist
   trafficCount: 5,         // ordinary cars alive around the player
   rivalCount: 2,           // illegal racers cruising the road
   rivalLevel: 6,           // how good they are, 1 (Sunday driver) .. 10 (touge legend) - see ai/rivals.js
@@ -126,7 +128,8 @@ export const PHYSICS = {
   // --- "arcade" dials: 1.0 everywhere = the real car. Raise for a Need-for-Speed feel. ---
   gripBoost: 1.75,         // tyre grip multiplier (more = corners harder, less understeer)
   speedGrip: 0.7,          // extra grip at high speed (0.7 = +70% at 215 km/h), like big downforce: fights high-speed understeer
-  powerBoost: 2.0,         // engine torque multiplier (2 = heavily tuned cars)
+  powerBoost: 1.3,         // engine torque multiplier for EVERY car. 1.3 = a factory car is lively but leaves room to grow;
+                           // tuning parts (content/upgrades.json) add the rest. It was 2.0 before the game had upgrades
   gearing: 0.8,            // < 1 = taller gears: higher top speed in every gear (0.8 = +25%)
   brakeBoost: 1.55,        // braking force multiplier
   steerAssist: 1.0,        // 0..1 how strongly the car is helped to rotate toward your steering

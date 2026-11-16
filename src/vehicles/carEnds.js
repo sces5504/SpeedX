@@ -27,13 +27,14 @@ import { clamp, lerp } from '../core/mathUtils.js';
 import { canvasTexture, enhanceMaterial } from '../render/materials.js';
 import { carReflection } from '../render/reflections.js';
 import { LIMIT, lensMaterial } from './carDetails.js';
+import { U } from './carShell.js';
 
 export const LAMP_COLOURS = { head: 0xfff2d8, tail: 0xff1505, brake: 0xff1505, signal: 0xff8a00, reverse: 0xffffff };
 
 // Parts are paper-thin and lie on the skin, sometimes on top of each other. To keep them from
 // flickering against the skin or one another they are drawn after the body, in the order of
 // the list, and each simply paints over what is under it (see `flat` and renderOrder below).
-const flat = (material) => Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, depthWrite: false });
+export const flat = (material) => Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, depthWrite: false });
 const plastic = (settings) => flat(enhanceMaterial(new THREE.MeshStandardMaterial({ envMap: carReflection, ...settings }), { limit: LIMIT }));
 // A grille: black with bright bars. The picture repeats every 4 cm of the real car.
 const grilleLook = (draw) => plastic({ color: 0xffffff, roughness: 0.35, metalness: 0.5, map: canvasTexture(32, 32, (g, w, h) => { g.fillStyle = '#050506'; g.fillRect(0, 0, w, h); draw(g, w, h); }) });
@@ -78,7 +79,8 @@ export function endParts(spec, halfW) {
  * @returns {{ meshes: THREE.Mesh[], lamps: { head, tail, brake, reverse, signalL, signalR } }}
  *   a few meshes per finish and per lamp switch; lamps.<switch> lists the meshes that light up with it
  */
-export function buildEndParts(surface, parts) {
+// extra: finishes that belong to one car, by name - { paint2: its second paint colour } (carBuilder.js makes them)
+export function buildEndParts(surface, parts, extra = {}) {
   // Everything with the same finish (or lamp switch) at the same depth of the stack becomes one mesh.
   const piles = new Map();       // "name|order" -> { name, order, shapes: [] }
   const pile = (name, order, shape) => {
@@ -90,7 +92,7 @@ export function buildEndParts(surface, parts) {
     const placed = [];           // [from, to, bottom, top, layer] of the parts so far, to stack overlapping ones
     for (const part of list) {
       const rows = rowsOf(part), lamp = LAMP_COLOURS[part.is] !== undefined;
-      if (!lamp && !FINISHES[part.is]) { console.warn(`car "nose"/"tail": unknown part "${part.is}"`); continue; }
+      if (!lamp && !FINISHES[part.is] && !extra[part.is]) { console.warn(`car "nose"/"tail": unknown part "${part.is}"`); continue; }
       const bounds = [rows[0][0], rows[rows.length - 1][0], Math.min(...rows.map((r) => r[1])), Math.max(...rows.map((r) => r[2]))];
       const layer = 1 + Math.max(0, ...placed.filter((p) => p[0] < bounds[1] && p[1] > bounds[0] && p[2] < bounds[3] && p[3] > bounds[2]).map((p) => p[4]));
       placed.push([...bounds, layer]);
@@ -108,13 +110,65 @@ export function buildEndParts(surface, parts) {
   const meshes = [], lamps = { head: [], tail: [], brake: [], reverse: [], signalL: [], signalR: [] };
   for (const { name, order, shapes } of piles.values()) {
     const glow = LAMP_COLOURS[name.replace(/[LR]$/, '')];
-    const mesh = new THREE.Mesh(mergeGeometries(shapes), glow === undefined ? FINISHES[name] : flat(lensMaterial(glow)));
+    const mesh = new THREE.Mesh(mergeGeometries(shapes), glow === undefined ? FINISHES[name] || extra[name] : flat(lensMaterial(glow)));
     mesh.name = 'end_' + name;
     mesh.renderOrder = order;
     meshes.push(mesh);
     if (lamps[name]) lamps[name].push(mesh);
   }
   return { meshes, lamps };
+}
+
+// ---- Parts on the SIDES of the body ("side" in car.json) ---------------------------------
+// An air intake behind the door, a strip of trim, a panel in the car's second colour...
+//   { "is": finish, "rows": [[t, low, high], ...] }
+//     t           where along the car: 0 = nose ... 1 = tail (the same t as "stations")
+//     low, high   how far up the side: 0 = the sill, 1 = the shoulder under the windows,
+//                 up to 1.5 = the edge of the bonnet or boot above it
+// Later parts lie on top of earlier ones. Because the heights are measured round the body and
+// not in metres, a part follows the wheel arches and flares exactly as the skin does.
+export function buildSideParts(surface, parts, extra = {}) {
+  const meshes = [];
+  parts.forEach((part, order) => {
+    const material = FINISHES[part.is] || extra[part.is];
+    if (!material) { console.warn(`car "side": unknown part "${part.is}"`); return; }
+    const mesh = new THREE.Mesh(mergeGeometries([1, -1].map((side) => sidePatch(surface, part.rows, side))), material);
+    mesh.name = 'side_' + part.is;
+    mesh.renderOrder = 1 + order;
+    meshes.push(mesh);
+  });
+  return meshes;
+}
+function sidePatch(surface, rows, side) {
+  // Columns every 1 % of the car's length, eight steps up each: small triangles that hug the body.
+  const columns = [];
+  rows.forEach((row, k) => {
+    if (k > 0) {
+      const before = rows[k - 1], pieces = Math.max(1, Math.ceil((row[0] - before[0]) / 0.01));
+      for (let i = 1; i < pieces; i++) columns.push(before.map((value, m) => lerp(value, row[m], i / pieces)));
+    }
+    columns.push(row);
+  });
+  const up = 8, positions = [], uvs = [], index = [];
+  for (const [t, low, high] of columns) {
+    for (let r = 0; r <= up; r++) {
+      const point = surface.at(clamp(t, 0, 1), lerp(U.sill, U.shoulder, lerp(low, high, r / up)), side, LIFT);
+      positions.push(point.x, point.y, point.z);
+      uvs.push(point.z / TILE, point.y / TILE);
+    }
+  }
+  for (let c = 0; c < columns.length - 1; c++) {
+    for (let r = 0; r < up; r++) {
+      const a = c * (up + 1) + r, b = a + up + 1;
+      if (side > 0) index.push(a, a + 1, b, b, a + 1, b + 1); else index.push(a, b, a + 1, b, b + 1, a + 1);     // (front faces away from the car)
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 // ---- Outlines ---------------------------------------------------------------------------

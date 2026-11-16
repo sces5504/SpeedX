@@ -1,0 +1,60 @@
+{
+  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json."],
+  "groups": [
+    { "id": "frontBumper", "title": "FRONT BUMPER", "options": [
+      { "id": "ae86-front-aero", "look": { "lip": 0.05, "nose": { "bumper": [
+        {"is": "black", "box": [0, 0.5, 0.24, 0.42], "round": 0.04},
+        {"is": "mesh", "box": [0, 0.46, 0.26, 0.4], "round": 0.03},
+        {"is": "reverse", "circle": [0.63, 0.33, 0.036]}
+      ] } } },
+      { "id": "ae86-front-n2", "look": { "lip": 0.09, "nose": { "bumper": [
+        {"is": "black", "rows": [[0, 0.21, 0.45], [0.46, 0.21, 0.45], [0.6, 0.26, 0.42]]},
+        {"is": "mesh", "rows": [[0, 0.23, 0.43], [0.44, 0.23, 0.43], [0.56, 0.27, 0.41]]},
+        {"is": "black", "box": [0.66, 0.82, 0.22, 0.34], "round": 0.03},
+        {"is": "black", "rows": [[0.7, 0.36, 0.376], [0.9, 0.41, 0.426]]},
+        {"is": "black", "rows": [[0.7, 0.45, 0.466], [0.9, 0.5, 0.516]]}
+      ] } } }
+    ] },
+    { "id": "rearBumper", "title": "REAR BUMPER", "options": [
+      { "id": "ae86-rear-diffuser", "look": { "tail": { "bumper": [
+        {"is": "black", "box": [0, 0.66, 0.2, 0.36], "round": 0.03},
+        {"is": "grille", "box": [0, 0.52, 0.215, 0.335], "round": 0.02}
+      ] } } }
+    ] },
+    {"use": "skirts", "without": ["skirts-none"]},
+    {"use": "widebody"},
+    {"use": "canards"},
+    { "id": "headlights", "title": "HEADLIGHTS", "options": [
+      { "id": "ae86-head-fixed", "look": { "headlights": {"x": 0.68, "y": 0.59, "w": 0.3, "h": 0.06}, "nose": { "lamps": [
+        {"is": "head", "box": [0.52, 0.78, 0.558, 0.622], "round": 0.008},
+        {"is": "signal", "box": [0.79, 0.87, 0.558, 0.622], "round": 0.008}
+      ] } } },
+      { "id": "ae86-head-round", "look": { "headlights": {"x": 0.68, "y": 0.59, "w": 0.3, "h": 0.06}, "nose": { "lamps": [
+        {"is": "black", "box": [0.5, 0.87, 0.552, 0.628], "round": 0.008},
+        {"is": "head", "circle": [0.58, 0.59, 0.03]},
+        {"is": "head", "circle": [0.7, 0.59, 0.03]},
+        {"is": "signal", "circle": [0.81, 0.59, 0.024]}
+      ] } } }
+    ] },
+    { "id": "taillights", "title": "TAIL LIGHTS", "options": [
+      { "id": "ae86-tail-redline", "look": { "tail": { "lamps": [
+        {"is": "smoked", "box": [0, 0.35, 0.7, 0.82], "round": 0.01},
+        {"is": "brake", "box": [0.36, 0.8, 0.7, 0.82], "round": 0.012},
+        {"is": "signal", "box": [0.36, 0.8, 0.7, 0.728], "round": 0.006},
+        {"is": "reverse", "box": [0.2, 0.33, 0.705, 0.74], "round": 0.008}
+      ] } } },
+      { "id": "ae86-tail-round", "look": { "tail": { "lamps": [
+        {"is": "black", "box": [0, 0.82, 0.69, 0.83], "round": 0.01},
+        {"is": "brake", "circle": [0.72, 0.76, 0.05]},
+        {"is": "brake", "circle": [0.6, 0.76, 0.05]},
+        {"is": "signal", "circle": [0.485, 0.76, 0.042]},
+        {"is": "reverse", "circle": [0.385, 0.76, 0.034]}
+      ] } } }
+    ] },
+    {"use": "hood", "without": ["hood-carbon", "hood-carbon-vented", "hood-carbon-scoop"]},
+    {"use": "roofScoop"},
+    {"use": "exhaust", "without": ["exhaust-single"]},
+    {"use": "spoiler", "without": ["wing-none"]},
+    {"use": "rims"}
+  ]
+}

@@ -11,6 +11,7 @@
 //                    (sections | items | details) and switches between items
 //   viewer.js        the 3D window (one for the whole page)
 //   carsPage.js      車輛
+//   partsPage.js     引擎（可以轟油門聽）· 外觀套件
 //   libraryPage.js   建築與物件 · 植被 · 地表
 //   placesPage.js    停靠點 · 交通規則
 //   mapsPage.js      地圖
@@ -59,7 +60,7 @@ const page = {
 };
 
 // ---- 3. The sections. A file that fails to load only loses its own sections. -------------------
-const files = [() => import('./carsPage.js'), () => import('./libraryPage.js'), () => import('./placesPage.js'), () => import('./mapsPage.js')];
+const files = [() => import('./carsPage.js'), () => import('./partsPage.js'), () => import('./libraryPage.js'), () => import('./placesPage.js'), () => import('./mapsPage.js')];
 const sections = [];
 for (const load of files) {
   try {

@@ -1,7 +1,7 @@
 {
   "id": "ae86",
   "role": "hero",
-  "name": "Toyota Sprinter Trueno GT-APEX (AE86)",
+  "kit": true,
   "year": 1985,
   "length": 4.205,
   "width": 1.625,
@@ -14,14 +14,16 @@
   "waist": 0.5,
   "flares": [0.02, 0.02],
   "archGap": 0.045,
+  "edgeRoll": [0.45, 0.3],
   "colors": ["#e9e9e4", "#b01c1c", "#15171a", "#2a4f8a"],
   "twoTone": "#121314",
   "stations": [
-    [0, 0.5, 0, 0.9],
-    [0.0071, 0.61, 0, 0.95],
-    [0.0238, 0.655, 0, 0.99],
-    [0.0951, 0.7, 0, 1],
-    [0.3377, 0.825, 0, 1, "ws"],
+    [0, 0.52, 0, 0.86],
+    [0.0071, 0.635, 0, 0.93],
+    [0.0238, 0.685, 0, 0.98],
+    [0.0951, 0.735, 0, 1],
+    [0.21, 0.785, 0, 1],
+    [0.3377, 0.84, 0, 1, "ws"],
     [0.4756, 0.84, 1.3, 1, "cab"],
     [0.5707, 0.845, 1.335, 1, "cab"],
     [0.6778, 0.855, 1.31, 1, "rw"],
@@ -36,31 +38,32 @@
     [[0.6183], [0.7848], [0.8466, 0, 0]]
   ],
   "doorLines": [0.3092, 0.6088],
-  "headlights": {"x": 0.64, "y": 0.7, "w": 0.3, "h": 0.12, "popup": true, "z": 0.05},
+  "headlights": {"x": 0.64, "y": 0.725, "w": 0.3, "h": 0.12, "popup": true, "z": 0.05},
   "taillights": {"x": 0.7, "y": 0.76, "w": 0.4, "h": 0.12},
   "nose": [
-    {"is": "black", "box": [0, 0.5, 0.53, 0.6], "round": 0.01},
-    {"is": "signal", "box": [0.52, 0.86, 0.53, 0.6], "round": 0.01},
-    {"is": "reverse", "box": [0.4, 0.56, 0.33, 0.39], "round": 0.02}
+    {"is": "black", "box": [0, 0.5, 0.555, 0.625], "round": 0.01},
+    {"slot": "lamps", "is": "signal", "box": [0.52, 0.86, 0.555, 0.625], "round": 0.01},
+    {"slot": "bumper", "is": "reverse", "box": [0.4, 0.56, 0.33, 0.39], "round": 0.02}
   ],
   "tail": [
-    {"is": "smoked", "box": [0, 0.35, 0.7, 0.82], "round": 0.01},
-    {"is": "brake", "box": [0.36, 0.64, 0.7, 0.82], "round": 0.012},
-    {"is": "signal", "box": [0.65, 0.8, 0.7, 0.82], "round": 0.012},
-    {"is": "reverse", "box": [0.37, 0.46, 0.705, 0.74], "round": 0.008}
+    {"slot": "lamps", "is": "smoked", "box": [0, 0.35, 0.7, 0.82], "round": 0.01},
+    {"slot": "lamps", "is": "brake", "box": [0.36, 0.64, 0.7, 0.82], "round": 0.012},
+    {"slot": "lamps", "is": "signal", "box": [0.65, 0.8, 0.7, 0.82], "round": 0.012},
+    {"slot": "lamps", "is": "reverse", "box": [0.37, 0.46, 0.705, 0.74], "round": 0.008}
   ],
   "plates": [0.42, 0.76],
   "interior": {"seats": "#7a5238", "dash": "#3b2a20", "carpet": "#2a1c14", "accent": "#d9a25e"},
   "driverSide": 1,
   "gaugeColor": "#ffb347",
+  "soundBody": {"resonance": 190, "brightness": 1.12},
   "mass": 940,
   "frontWeight": 0.53,
   "cgHeight": 0.47,
   "dragArea": 0.72,
-  "engine": { "idle": 950, "redline": 7700, "torque": [[1000, 95], [3000, 128], [5200, 149], [6600, 140], [7700, 112]] },
+  "engine": "4age",
+  "engineSwaps": ["sr20det", "k20a", "13b-rew", "20b-rew", "ej207", "vq35de", "coyote50"],
   "gears": [3.587, 2.022, 1.384, 1, 0.861],
   "finalDrive": 4.3,
-  "sound": "na4",
   "grip": 0.98,
   "brakeG": 0.98
 }

@@ -19,6 +19,169 @@
     "file": "race_low.wav",
     "rpm": 2100
   },
+  "i4race_idle": {
+    "file": "i4race_idle.wav",
+    "rpm": 1240
+  },
+  "i4race_mid": {
+    "file": "i4race_mid.wav",
+    "rpm": 5595
+  },
+  "i4race_high": {
+    "file": "i4race_high.wav",
+    "rpm": 6460
+  },
+  "i6_idle": {
+    "file": "i6_idle.wav",
+    "rpm": 830
+  },
+  "i6_low": {
+    "file": "i6_low.wav",
+    "rpm": 3290
+  },
+  "i6_mid": {
+    "file": "i6_mid.wav",
+    "rpm": 4710
+  },
+  "i6_high": {
+    "file": "i6_high.wav",
+    "rpm": 6980
+  },
+  "f4_idle": {
+    "file": "f4_idle.wav",
+    "rpm": 720
+  },
+  "f4_low": {
+    "file": "f4_low.wav",
+    "rpm": 3520
+  },
+  "f4_mid": {
+    "file": "f4_mid.wav",
+    "rpm": 4880
+  },
+  "f4_high": {
+    "file": "f4_high.wav",
+    "rpm": 7000
+  },
+  "f6_low": {
+    "file": "f6_low.wav",
+    "rpm": 2410
+  },
+  "f6_mid": {
+    "file": "f6_mid.wav",
+    "rpm": 3270
+  },
+  "v6_idle": {
+    "file": "v6_idle.wav",
+    "rpm": 970
+  },
+  "v6_low": {
+    "file": "v6_low.wav",
+    "rpm": 3350
+  },
+  "v6_mid": {
+    "file": "v6_mid.wav",
+    "rpm": 3825
+  },
+  "v6_high": {
+    "file": "v6_high.wav",
+    "rpm": 5795
+  },
+  "v8_idle": {
+    "file": "v8_idle.wav",
+    "rpm": 845
+  },
+  "v8_low": {
+    "file": "v8_low.wav",
+    "rpm": 3065
+  },
+  "v8_mid": {
+    "file": "v8_mid.wav",
+    "rpm": 6350
+  },
+  "v8t_idle": {
+    "file": "v8t_idle.wav",
+    "rpm": 845
+  },
+  "v8t_mid": {
+    "file": "v8t_mid.wav",
+    "rpm": 5890
+  },
+  "v8t_high": {
+    "file": "v8t_high.wav",
+    "rpm": 7040
+  },
+  "v10_idle": {
+    "file": "v10_idle.wav",
+    "rpm": 805
+  },
+  "v10_low": {
+    "file": "v10_low.wav",
+    "rpm": 3280
+  },
+  "v10_mid": {
+    "file": "v10_mid.wav",
+    "rpm": 3870
+  },
+  "v10f1_idle": {
+    "file": "v10f1_idle.wav",
+    "rpm": 3740
+  },
+  "v10f1_low": {
+    "file": "v10f1_low.wav",
+    "rpm": 7650
+  },
+  "v10f1_mid": {
+    "file": "v10f1_mid.wav",
+    "rpm": 12210
+  },
+  "v10f1_high": {
+    "file": "v10f1_high.wav",
+    "rpm": 19010
+  },
+  "v12_idle": {
+    "file": "v12_idle.wav",
+    "rpm": 965
+  },
+  "v12_low": {
+    "file": "v12_low.wav",
+    "rpm": 2770
+  },
+  "rotary_low": {
+    "file": "rotary_low.wav",
+    "rpm": 4290
+  },
+  "rotary_mid": {
+    "file": "rotary_mid.wav",
+    "rpm": 5010
+  },
+  "rotary_high": {
+    "file": "rotary_high.wav",
+    "rpm": 6710
+  },
+  "rotary_idle": {
+    "file": "rotary_idle.wav",
+    "rpm": 2420
+  },
+  "rotarybp_idle": {
+    "file": "rotarybp_idle.wav",
+    "rpm": 2420
+  },
+  "rotarybp_low": {
+    "file": "rotarybp_low.wav",
+    "rpm": 3320
+  },
+  "rotarybp_mid": {
+    "file": "rotarybp_mid.wav",
+    "rpm": 5500
+  },
+  "rotarybp_high": {
+    "file": "rotarybp_high.wav",
+    "rpm": 6720
+  },
+  "blowoff3": {
+    "file": "blowoff3.wav"
+  },
   "pop1": {
     "file": "pop1.wav"
   },
@@ -34,6 +197,18 @@
   "pop5": {
     "file": "pop5.wav"
   },
+  "crackle1": {
+    "file": "crackle1.wav"
+  },
+  "crackle2": {
+    "file": "crackle2.wav"
+  },
+  "crackle3": {
+    "file": "crackle3.wav"
+  },
+  "crackle4": {
+    "file": "crackle4.wav"
+  },
   "blowoff1": {
     "file": "blowoff1.wav"
   },
@@ -42,7 +217,7 @@
   },
   "supercharger": {
     "file": "supercharger.wav",
-    "rpm": 6000
+    "rpm": 5260
   },
   "rain_cabin": {
     "file": "rain_cabin.wav"

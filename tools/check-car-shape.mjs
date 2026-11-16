@@ -5,16 +5,17 @@
 // is a place where it steps or zig-zags. For every point of every ring this measures how far
 // the point sits off the straight line between its two neighbours along the car ("bump") and
 // reports the places where three bumps in a row point up, down, up.
-import fs from 'node:fs';
 import { makeShell, ACROSS } from '../src/vehicles/carShell.js';
-import { finishSpec } from '../src/vehicles/carSpecs.js';
+import { loadAllCars } from './content.mjs';
 
 const LIMIT = 0.002;         // metres: zig-zags smaller than this cannot be seen
 const names = ['floor', 'floor', 'floor', 'sill', 'lower door', 'waist', 'upper door', 'under the shoulder', 'shoulder', 'glass (bottom)', 'glass (top)', 'roof edge', 'roof', 'roof', 'centre line'];
-const ids = process.argv.length > 2 ? process.argv.slice(2) : JSON.parse(fs.readFileSync('public/content/cars/index.json')).cars;
+const cars = await loadAllCars();
+const ids = process.argv.length > 2 ? process.argv.slice(2) : Object.keys(cars);
 let total = 0;
 for (const id of ids) {
-  const spec = finishSpec({ ...JSON.parse(fs.readFileSync(`public/content/cars/${id}/car.json`)), id });
+  const spec = cars[id];
+  if (!spec) { console.log(`${id}: no such car`); total++; continue; }
   // (the same measurements carBuilder.js works out)
   const a = spec.wheelbase * (1 - spec.frontWeight), frontZ = -a - spec.frontOverhang;
   const dims = { a, b: spec.wheelbase * spec.frontWeight, frontZ, rearZ: frontZ + spec.length, halfW: spec.width / 2 };

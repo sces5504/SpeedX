@@ -6,18 +6,19 @@
 import * as THREE from 'three';
 import { GRAPHICS, PHYSICS, ROAD } from '../config.js';
 import { clamp, damp, lerp, noise1 } from '../core/mathUtils.js';
-import { HERO_CARS } from './carSpecs.js';
 import { buildCar } from './carBuilder.js';
 import { buildInterior } from './interior.js';
 import { createVehicle, stepVehicle } from './vehiclePhysics.js';
 import { collideWithRoadEdges } from '../game/collisions.js';
 import { shared, makeHeadlightCookie } from '../render/materials.js';
+import { releaseResources } from './carResources.js';
 
 const cookie = makeHeadlightCookie();
 const proj = {};
 
-export function createPlayer(scene, map, carId, colorIndex, mirrorTexture) {
-  const spec = HERO_CARS[carId];
+// spec = the finished setup of the car to drive (carSetup.js).
+export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
+  const carId = spec.id;
   const car = buildCar(spec, spec.colors[colorIndex % spec.colors.length]);
   const interior = buildInterior(car, mirrorTexture);
   car.body.add(interior.group);
@@ -148,6 +149,14 @@ export function createPlayer(scene, map, carId, colorIndex, mirrorTexture) {
     shared.headPower.value = lerp(shared.headPower.value, power, Math.min(1, dt * 18));
     interior.update(v, player.wiperCycle, dt);
   }
-  player.dispose = () => { scene.remove(car.group); };
+  // The owner fitted different parts: drive on with the new finished setup (carSetup.js).
+  // Only numbers change, so the 3D car stays as it is.
+  player.applySetup = (newSpec) => {
+    player.spec = newSpec;
+    Object.assign(vehicle, { spec: newSpec, mass: newSpec.mass, yawInertia: newSpec.mass * vehicle.a * vehicle.b * 1.05 });
+    vehicle.gear = Math.min(vehicle.gear, newSpec.gears.length);
+  };
+  // Throw the car away and free its 3D data (the cockpit first: it was claimed on its own).
+  player.dispose = () => { car.body.remove(interior.group); releaseResources(interior.group); car.dispose(); };
   return player;
 }

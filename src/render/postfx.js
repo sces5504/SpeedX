@@ -242,7 +242,8 @@ export function createPostFx(renderer, scene, camera) {
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), GRAPHICS.bloomStrength, GRAPHICS.bloomRadius, GRAPHICS.bloomThreshold);
   const streak = new StreakPass(GRAPHICS.streakTint);
   const lens = new ShaderPass(LensShader);
-  composer.addPass(new RenderPass(scene, camera));
+  const drawScene = new RenderPass(scene, camera);
+  composer.addPass(drawScene);
   composer.addPass(new RememberPass(camera));
   composer.addPass(streak);
   composer.addPass(bloom);
@@ -275,6 +276,8 @@ export function createPostFx(renderer, scene, camera) {
       u.uAspect.value = width / height;
       for (const pass of filterPasses.values()) pass.uniforms.uAspect.value = width / height;
     },
+    // Draw another scene instead of the world (the garage's showroom); give the world back to return.
+    setScene(other) { drawScene.scene = other; },
     // The filter that is on ('off' = none). Choose one by its id in filters.js.
     get filter() { return filter; },
     setFilter(id) {

@@ -11,7 +11,8 @@
 //   * A tyre has one budget of grip. Braking or accelerating spends part of
 //     it, leaving less for cornering ("friction circle").
 //   * Braking shifts weight to the front tyres, accelerating to the rear.
-//   * Rear-wheel drive: engine torque -> gearbox -> rear tyres.
+//   * Engine torque -> gearbox -> the driven tyres: the rear ones ("drive": "rwd" in car.json,
+//     the default), the front ones ("fwd") or all four ("awd").
 //
 // Sign conventions: forward speed +, sideways speed + = to the right,
 // steering and yaw rate + = to the LEFT (matches Three.js rotation.y).
@@ -20,14 +21,13 @@ import { PHYSICS } from '../config.js';
 import { clamp, lerp, approach, smoothstep } from '../core/mathUtils.js';
 
 const G = PHYSICS.gravity;
-const DRIVETRAIN_EFFICIENCY = 0.88;
 const AIR_DENSITY = 1.2;
 const TYRE_B = 11.5, TYRE_C = 1.45;      // shape of the grip curve (stiffness, peak)
 const MAX_STEER = 0.60;                  // 34 degrees of front wheel lock
-const SHIFT_TIME = 0.14;
 const REAR_BIAS = 1.06;
 const BRAKE_STABILITY = 0.7;
 const SLIDE_EASE = 0.42;
+const FRONT_DRIVE = { rwd: 0, awd: 0.4, fwd: 1 };   // share of the engine's push that goes to the front tyres
 
 export function createVehicle(spec) {
   const a = spec.wheelbase * (1 - spec.frontWeight);
@@ -131,7 +131,10 @@ export function stepVehicle(v, controls, dt, ground) {
   const totalRatio = ratio * spec.finalDrive * PHYSICS.gearing;
   const wheelRpm = (Math.abs(vLong) / spec.wheelRadius) * Math.abs(totalRatio) * (60 / (2 * Math.PI));
   const launchRpm = spec.engine.idle + v.throttle * (spec.engine.redline * 0.45 - spec.engine.idle);
-  const targetRpm = Math.min(spec.engine.redline + 150, Math.max(wheelRpm * (1 + v.wheelSpin * 0.35), launchRpm));
+  // Wheelspin lets the revs flare - but not into the limiter. (Otherwise a very powerful car bogs on its
+  // own fuel cut every time the tyres let go, and more power makes it SLOWER off the line.)
+  const flaredRpm = Math.min(wheelRpm * (1 + v.wheelSpin * 0.35), Math.max(wheelRpm, spec.engine.redline * 0.96));
+  const targetRpm = Math.min(spec.engine.redline + 150, Math.max(flaredRpm, launchRpm));
   v.rpm = lerp(v.rpm, targetRpm, Math.min(1, dt * 14));
 
   let driveForce = 0;
@@ -139,15 +142,15 @@ export function stepVehicle(v, controls, dt, ground) {
     v.shiftTimer -= dt;                                     // mid-shift: no power
   } else {
     const torque = v.rpm > spec.engine.redline ? 0 : engineTorque(spec, v.rpm) * v.throttle * PHYSICS.powerBoost;
-    const engineBrake = (1 - v.throttle) * 0.10 * spec.engine.torque[2][1] * (v.rpm / spec.engine.redline);
-    driveForce = ((torque - engineBrake * (wheelRpm > spec.engine.idle ? 1 : 0)) * totalRatio * DRIVETRAIN_EFFICIENCY) / spec.wheelRadius;
+    const engineBrake = (1 - v.throttle) * 0.10 * spec.engine.brakeTorque * (v.rpm / spec.engine.redline);
+    driveForce = ((torque - engineBrake * (wheelRpm > spec.engine.idle ? 1 : 0)) * totalRatio * spec.driveEfficiency) / spec.wheelRadius;
     // Automatic gearbox
     if (v.gear >= 1) {
       const gears = spec.gears;
-      if (v.gear < gears.length && wheelRpm > spec.engine.redline * 0.97) { v.gear++; v.shiftTimer = SHIFT_TIME; }
+      if (v.gear < gears.length && wheelRpm > spec.engine.redline * 0.97) { v.gear++; v.shiftTimer = spec.shiftTime; }
       // Kick-down: with your foot down the gearbox drops gears to keep the engine screaming
       // near its power peak; cruising or lifting, it only changes down when the revs get low.
-      else if (v.gear > 1 && wheelRpm * (gears[v.gear - 2] / gears[v.gear - 1]) < spec.engine.redline * (v.throttle > 0.7 ? 0.9 : 0.6)) { v.gear--; v.shiftTimer = SHIFT_TIME * 0.6; }
+      else if (v.gear > 1 && wheelRpm * (gears[v.gear - 2] / gears[v.gear - 1]) < spec.engine.redline * (v.throttle > 0.7 ? 0.9 : 0.6)) { v.gear--; v.shiftTimer = spec.shiftTime * 0.6; }
     }
   }
   if (v.handbrake) driveForce = 0;
@@ -160,8 +163,9 @@ export function stepVehicle(v, controls, dt, ground) {
   const maxBrake = (m * Math.abs(vLong)) / dt;              // never brake past a standstill
   const brakeTotal = Math.min(v.brake * spec.brakeG * PHYSICS.brakeBoost * m * G, maxBrake);
   const brakeFront = Math.min(brakeTotal * 0.70, gripFront * 0.96);          // 0.96 = ABS keeps it rolling
-  const frontLong = -brakeFront * Math.sign(wheelFwd);
-  const frontBudget = Math.sqrt(Math.max(0.05, 1 - 0.22 * (brakeFront / gripFront) ** 2));   // you can still steer under braking
+  const driveFront = driveForce * (FRONT_DRIVE[spec.drive] ?? 0);            // (nothing on a rear-wheel-drive car)
+  const frontLong = clamp(driveFront - brakeFront * Math.sign(wheelFwd), -gripFront, gripFront);
+  const frontBudget = Math.sqrt(Math.max(0.05, 1 - 0.22 * (frontLong / gripFront) ** 2));   // you can still steer under braking
   const frontSide = -gripFront * tyreCurve(slipAngleFront) * frontBudget;
 
   // ---- 6. Rear tyres ------------------------------------------------------------
@@ -181,9 +185,11 @@ export function stepVehicle(v, controls, dt, ground) {
     // Keyboard throttle is all-or-nothing, so ease the power off as the tail steps out.
     // You can still hold a power slide, it just does not instantly spin.
     const slideEase = PHYSICS.keyboardAids ? 1 - SLIDE_EASE * smoothstep(0.14, 0.5, Math.abs(slipAngleRear)) : 1;
-    const wanted = driveForce * (driveForce * vLong > 0 ? slideEase : 1) - brakeRear * Math.sign(vLong);
+    const wanted = (driveForce - driveFront) * (driveForce * vLong > 0 ? slideEase : 1) - brakeRear * Math.sign(vLong);
     rearLong = clamp(wanted, -gripRear, gripRear);
-    v.wheelSpin = lerp(v.wheelSpin, clamp(Math.abs(wanted) / gripRear - 1, 0, 2) * (v.throttle > 0.2 ? 1 : 0), Math.min(1, dt * 10));
+    // Wheelspin: the driven tyres are asked for more push than they have grip for.
+    const asked = Math.max(Math.abs(wanted) / gripRear, Math.abs(driveFront) / gripFront);
+    v.wheelSpin = lerp(v.wheelSpin, clamp(asked - 1, 0, 2) * (v.throttle > 0.2 ? 1 : 0), Math.min(1, dt * 10));
     // Power spends rear grip (power oversteer is allowed); braking does not (the car stays straight).
     const spending = rearLong * vLong > 0 ? 0.42 : 0.12;
     const rearBudget = Math.sqrt(Math.max(0.06, 1 - spending * (rearLong / gripRear) ** 2));

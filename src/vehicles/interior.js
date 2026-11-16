@@ -21,6 +21,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { canvasTexture, enhanceMaterial } from '../render/materials.js';
+import { claimResources } from './carResources.js';
 import { MPH } from '../config.js';
 
 const UP = new THREE.Vector3(0, 1, 0), scratch = new THREE.Vector3();
@@ -328,6 +329,7 @@ export function buildInterior(car, mirrorTexture) {
 
   let shownSteer = 0;
   group.visible = false;
+  claimResources(group);                                     // (playerCar.js releases them when the car is thrown away)
   return {
     group,
     eye,                                                       // where the driver's eyes are, in car coordinates

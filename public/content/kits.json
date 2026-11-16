@@ -1,0 +1,289 @@
+{
+  "about": [
+    "SHARED BODY PARTS: groups of parts that fit any generated car, because the game builds them from",
+    "the car's own measurements (a wing stands on that car's boot, a scoop follows that car's bonnet).",
+    "A car's kit.json takes one with  { \"use\": \"rims\" }  (and may leave options out: \"without\": [ids]).",
+    "Parts that must match one car's bodywork (bumpers, lamps) are NOT here: they are in that car's kit.json.",
+    "Format and the fields a part may change: src/vehicles/carLook.js. Names: names.json under \"parts\"."
+  ],
+  "groups": {
+    "skirts": { "id": "skirts", "title": "SIDE SKIRTS",
+      "options": [
+        { "id": "skirts-none", "look": {
+            "skirts": false
+          }
+        },
+        { "id": "skirts-blade", "look": {
+            "skirts": true
+          }
+        },
+        { "id": "skirts-deep", "look": {
+            "skirts": {
+              "drop": 0.03,
+              "out": 0.012
+            }
+          }
+        }
+      ]
+    },
+    "widebody": { "id": "widebody", "title": "WIDE BODY",
+      "options": [
+        { "id": "wide-kit", "blocks": [
+            "skirts"
+          ],
+          "look": {
+            "flares": [
+              0.06,
+              0.075
+            ],
+            "wheelOut": 0.045,
+            "skirts": {
+              "drop": 0.03,
+              "out": 0.03
+            }
+          }
+        },
+        { "id": "wide-kit-xl", "blocks": [
+            "skirts"
+          ],
+          "look": {
+            "flares": [
+              0.085,
+              0.105
+            ],
+            "wheelOut": 0.07,
+            "skirts": {
+              "drop": 0.035,
+              "out": 0.045
+            }
+          }
+        }
+      ]
+    },
+    "hood": { "id": "hood", "title": "HOOD",
+      "options": [
+        { "id": "hood-vented", "look": {
+            "hood": {
+              "vents": true
+            }
+          }
+        },
+        { "id": "hood-scoop", "look": {
+            "hood": {
+              "scoop": true
+            }
+          }
+        },
+        { "id": "hood-carbon", "blocks": [
+            "livery"
+          ],
+          "look": {
+            "twoTone": "#141518",
+            "twoToneZone": "hood"
+          }
+        },
+        { "id": "hood-carbon-vented", "blocks": [
+            "livery"
+          ],
+          "look": {
+            "hood": {
+              "vents": true
+            },
+            "twoTone": "#141518",
+            "twoToneZone": "hood"
+          }
+        },
+        { "id": "hood-carbon-scoop", "blocks": [
+            "livery"
+          ],
+          "look": {
+            "hood": {
+              "scoop": true
+            },
+            "twoTone": "#141518",
+            "twoToneZone": "hood"
+          }
+        }
+      ]
+    },
+    "roofScoop": { "id": "roofScoop", "title": "ROOF SCOOP",
+      "options": [
+        { "id": "roof-scoop", "look": {
+            "roofScoop": true
+          }
+        }
+      ]
+    },
+    "exhaust": { "id": "exhaust", "title": "EXHAUST TIPS",
+      "options": [
+        { "id": "exhaust-single", "look": {
+            "exhausts": 1
+          }
+        },
+        { "id": "exhaust-twin", "look": {
+            "exhausts": 2
+          }
+        },
+        { "id": "exhaust-centre", "look": {
+            "exhausts": "centre"
+          }
+        },
+        { "id": "exhaust-quad", "look": {
+            "exhausts": "quad"
+          }
+        }
+      ]
+    },
+    "spoiler": { "id": "spoiler", "title": "SPOILER",
+      "options": [
+        { "id": "wing-none", "look": {
+            "spoiler": null
+          }
+        },
+        { "id": "wing-lip", "look": {
+            "spoiler": {
+              "lip": true
+            }
+          }
+        },
+        { "id": "wing-blade", "look": {
+            "spoiler": {
+              "rise": 0.13,
+              "back": 0.16
+            }
+          }
+        },
+        { "id": "wing-gt-low", "look": {
+            "spoiler": {
+              "rise": 0.12,
+              "gt": true,
+              "back": 0.16
+            }
+          }
+        },
+        { "id": "wing-gt", "look": {
+            "spoiler": {
+              "rise": 0.21,
+              "gt": true,
+              "back": 0.22
+            }
+          }
+        },
+        { "id": "wing-gt-high", "look": {
+            "spoiler": {
+              "rise": 0.32,
+              "gt": true,
+              "back": 0.1
+            }
+          }
+        }
+      ]
+    },
+    "rims": { "id": "rims", "title": "RIM COLOUR",
+      "options": [
+        { "id": "rims-black", "look": {
+            "rimColor": "#17181b"
+          }
+        },
+        { "id": "rims-white", "look": {
+            "rimColor": "#e6e6e2"
+          }
+        },
+        { "id": "rims-gold", "look": {
+            "rimColor": "#b8923a"
+          }
+        },
+        { "id": "rims-bronze", "look": {
+            "rimColor": "#6b4a2e"
+          }
+        },
+        { "id": "rims-red", "look": {
+            "rimColor": "#a01818"
+          }
+        },
+        { "id": "rims-gunmetal", "look": {
+            "rimColor": "#4a4d52"
+          }
+        },
+        { "id": "rims-blue", "look": {
+            "rimColor": "#1f4fa8"
+          }
+        },
+        { "id": "rims-green", "look": {
+            "rimColor": "#57c98a"
+          }
+        }
+      ]
+    },
+    "livery": { "id": "livery", "title": "LIVERY",
+      "options": [
+        { "id": "livery-lower", "look": {
+            "twoTone": "#141518",
+            "twoToneZone": ""
+          }
+        },
+        { "id": "livery-lower-silver", "look": {
+            "twoTone": "#b9bcc2",
+            "twoToneZone": ""
+          }
+        },
+        { "id": "livery-band", "look": {
+            "twoTone": "#141518",
+            "twoToneZone": "top"
+          }
+        },
+        { "id": "livery-band-white", "look": {
+            "twoTone": "#e9e9e4",
+            "twoToneZone": "top"
+          }
+        },
+        { "id": "livery-band-red", "look": {
+            "twoTone": "#a01818",
+            "twoToneZone": "top"
+          }
+        }
+      ]
+    },
+    "canards": { "id": "canards", "title": "CANARDS",
+      "options": [
+        { "id": "canards-twin", "look": {
+            "nose": {
+              "canards": [
+                {
+                  "is": "black",
+                  "rows": [
+                    [
+                      0.74,
+                      0.3,
+                      0.316
+                    ],
+                    [
+                      0.95,
+                      0.35,
+                      0.366
+                    ]
+                  ]
+                },
+                {
+                  "is": "black",
+                  "rows": [
+                    [
+                      0.74,
+                      0.4,
+                      0.416
+                    ],
+                    [
+                      0.95,
+                      0.45,
+                      0.466
+                    ]
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

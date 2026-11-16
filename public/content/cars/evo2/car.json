@@ -1,7 +1,7 @@
 {
   "id": "evo2",
   "role": "hero",
-  "name": "Mercedes-Benz 190 E 2.5-16 Evolution II",
+  "kit": true,
   "year": 1990,
   "length": 4.43,
   "width": 1.72,
@@ -37,19 +37,19 @@
   "headlights": {"x": 0.58, "y": 0.715, "w": 0.32, "h": 0.15},
   "taillights": {"x": 0.66, "y": 0.775, "w": 0.5, "h": 0.16},
   "nose": [
-    {"is": "black", "box": [0, 1.15, 0.505, 0.55], "round": 0.005},
+    {"slot": "bumper", "is": "black", "box": [0, 1.15, 0.505, 0.55], "round": 0.005},
     {"is": "chrome", "box": [0, 0.31, 0.605, 0.815], "round": 0.02},
     {"is": "grille", "box": [0, 0.285, 0.625, 0.795], "round": 0.012},
-    {"is": "head", "box": [0.34, 0.66, 0.64, 0.79], "round": 0.015},
-    {"is": "signal", "box": [0.675, 0.87, 0.64, 0.79], "round": 0.015},
-    {"is": "black", "box": [0, 0.5, 0.26, 0.39], "round": 0.03},
-    {"is": "black", "box": [0.58, 0.78, 0.27, 0.37], "round": 0.03}
+    {"slot": "lamps", "is": "head", "box": [0.34, 0.66, 0.64, 0.79], "round": 0.015},
+    {"slot": "lamps", "is": "signal", "box": [0.675, 0.87, 0.64, 0.79], "round": 0.015},
+    {"slot": "bumper", "is": "black", "box": [0, 0.5, 0.26, 0.39], "round": 0.03},
+    {"slot": "bumper", "is": "black", "box": [0.58, 0.78, 0.27, 0.37], "round": 0.03}
   ],
   "tail": [
-    {"is": "black", "box": [0, 1.1, 0.51, 0.555], "round": 0.005},
-    {"is": "reverse", "box": [0.3, 0.41, 0.695, 0.855], "round": 0.012},
-    {"is": "brake", "box": [0.42, 0.655, 0.695, 0.855], "round": 0.012},
-    {"is": "signal", "box": [0.665, 0.86, 0.695, 0.855], "round": 0.012}
+    {"slot": "bumper", "is": "black", "box": [0, 1.1, 0.51, 0.555], "round": 0.005},
+    {"slot": "lamps", "is": "reverse", "box": [0.3, 0.41, 0.695, 0.855], "round": 0.012},
+    {"slot": "lamps", "is": "brake", "box": [0.42, 0.655, 0.695, 0.855], "round": 0.012},
+    {"slot": "lamps", "is": "signal", "box": [0.665, 0.86, 0.695, 0.855], "round": 0.012}
   ],
   "plates": [0.44, 0.775],
   "moulding": true,
@@ -58,14 +58,15 @@
   "interior": {"seats": "#33343a", "dash": "#1c1c1f", "carpet": "#121214", "accent": "#c8c8cc"},
   "driverSide": -1,
   "gaugeColor": "#ffd9a0",
+  "soundBody": {"resonance": 110, "brightness": 0.92},
   "mass": 1340,
   "frontWeight": 0.54,
   "cgHeight": 0.5,
   "dragArea": 0.58,
-  "engine": { "idle": 900, "redline": 7700, "torque": [[1000, 150], [3000, 205], [5000, 245], [6500, 240], [7200, 229], [7700, 200]] },
+  "engine": "m102-evo",
+  "engineSwaps": ["2jz-gte", "rb26dett", "vr38dett", "coyote50", "m156", "f136", "s85", "m120", "f140"],
   "gears": [4.08, 2.52, 1.77, 1.26, 1],
   "finalDrive": 3.27,
-  "sound": "race4",
   "grip": 1.04,
   "brakeG": 1.05
 }

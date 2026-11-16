@@ -1,7 +1,7 @@
 {
   "id": "fd",
   "role": "hero",
-  "name": "Mazda RX-7 Type R (FD3S)",
+  "kit": true,
   "year": 1993,
   "length": 4.295,
   "width": 1.76,
@@ -12,7 +12,7 @@
   "clearance": 0.1,
   "tumble": 0.7,
   "tuck": 0.05,
-  "flares": [0.028, 0.04],
+  "flares": [0.018, 0.04],
   "archGap": 0.04,
   "edgeRoll": [0.6, 0.8],
   "colors": ["#c81e1e", "#f2d21a", "#1a1a1c", "#d9dadc"],
@@ -20,8 +20,8 @@
     [0, 0.47, 0, 0.62],
     [0.0093, 0.56, 0, 0.78],
     [0.0326, 0.615, 0, 0.9],
-    [0.0931, 0.67, 0, 0.97],
-    [0.2002, 0.725, 0, 1],
+    [0.0931, 0.685, 0, 0.97],
+    [0.2002, 0.748, 0, 1],
     [0.3492, 0.8, 0, 0.985, "ws"],
     [0.4703, 0.79, 1.19, 0.965, "cab"],
     [0.5471, 0.8, 1.23, 0.965, "cab"],
@@ -37,20 +37,20 @@
     [[0.624], [0.6752, 0.1, 1], [0.7334, 0.55, 0.75]]
   ],
   "doorLines": [0.326, 0.617],
-  "headlights": {"x": 0.6, "y": 0.7, "w": 0.24, "h": 0.1, "popup": true, "z": 0.115},
+  "headlights": {"x": 0.6, "y": 0.715, "w": 0.24, "h": 0.1, "popup": true, "z": 0.115},
   "taillights": {"x": 0.6, "y": 0.735, "w": 0.45, "h": 0.11},
   "nose": [
-    {"is": "black", "box": [0, 0.34, 0.24, 0.39], "round": 0.07},
-    {"is": "black", "box": [0.44, 0.64, 0.25, 0.34], "round": 0.03},
-    {"is": "signal", "box": [0.5, 0.72, 0.44, 0.5], "round": 0.027}
+    {"slot": "bumper", "is": "black", "box": [0, 0.34, 0.24, 0.39], "round": 0.07},
+    {"slot": "bumper", "is": "black", "box": [0.44, 0.64, 0.25, 0.34], "round": 0.03},
+    {"slot": "bumper", "is": "signal", "box": [0.5, 0.72, 0.44, 0.5], "round": 0.027}
   ],
   "tail": [
-    {"is": "smoked", "box": [0, 0.78, 0.67, 0.8], "round": 0.05},
-    {"is": "brake", "circle": [0.64, 0.735, 0.052]},
-    {"is": "brake", "circle": [0.515, 0.735, 0.052]},
-    {"is": "signal", "circle": [0.395, 0.735, 0.042]},
-    {"is": "reverse", "box": [0.22, 0.31, 0.715, 0.755], "round": 0.01},
-    {"is": "black", "box": [0, 0.5, 0.24, 0.32], "round": 0.02}
+    {"slot": "lamps", "is": "smoked", "box": [0, 0.78, 0.67, 0.8], "round": 0.05},
+    {"slot": "lamps", "is": "brake", "circle": [0.64, 0.735, 0.052]},
+    {"slot": "lamps", "is": "brake", "circle": [0.515, 0.735, 0.052]},
+    {"slot": "lamps", "is": "signal", "circle": [0.395, 0.735, 0.042]},
+    {"slot": "lamps", "is": "reverse", "box": [0.22, 0.31, 0.715, 0.755], "round": 0.01},
+    {"slot": "bumper", "is": "black", "box": [0, 0.5, 0.24, 0.32], "round": 0.02}
   ],
   "plates": [0.4, 0.5],
   "skirts": true,
@@ -59,14 +59,15 @@
   "interior": {"seats": "#8a1a1c", "dash": "#1d1d20", "carpet": "#161012", "accent": "#e23a30"},
   "driverSide": 1,
   "gaugeColor": "#ffffff",
+  "soundBody": {"resonance": 130, "brightness": 1.05},
   "mass": 1260,
   "frontWeight": 0.5,
   "cgHeight": 0.44,
   "dragArea": 0.6,
-  "engine": { "idle": 850, "redline": 8000, "torque": [[1000, 160], [3000, 250], [5000, 294], [6500, 272], [8000, 205]] },
+  "engine": "13b-rew",
+  "engineSwaps": ["20b-rew", "k20a", "2jz-gte", "rb26dett", "vr38dett", "coyote50", "m156", "f136", "v10-52", "cgt57", "f140", "l539"],
   "gears": [3.483, 2.015, 1.391, 1, 0.719],
   "finalDrive": 4.1,
-  "sound": "rotary",
   "grip": 1.06,
   "brakeG": 1.08
 }

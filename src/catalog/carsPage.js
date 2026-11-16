@@ -7,7 +7,8 @@
 //   * the data sheet  every field of public/content/cars/<id>/car.json
 //   * the engine      torque and power curves, read with the game's engineTorque()
 //   * performance     MEASURED by driving the car in the game's physics
-//                     (vehicles/carStats.js — the same code as tools/physics-test.mjs)
+//                     (vehicles/carStats.js — the same code as tools/physics-test.mjs),
+//                     and the rating and ability bars made from it (vehicles/carRating.js)
 //   * the sound       the game's audio.js, revved with a button
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
@@ -16,8 +17,9 @@ import { buildCar } from '../vehicles/carBuilder.js';
 import { getCarModel } from '../vehicles/carModel.js';
 import { buildInterior } from '../vehicles/interior.js';
 import { engineTorque } from '../vehicles/vehiclePhysics.js';
-import { measureCar } from '../vehicles/carStats.js';
-import { createAudio, ENGINE_PROFILES } from '../audio/audio.js';
+import { rateCar, RATING_WEIGHTS } from '../vehicles/carRating.js';
+import { createAudio, ENGINE_PROFILES, soundOf } from '../audio/audio.js';
+import { createRevTest } from '../audio/revTest.js';
 import { KEYS, PHYSICS } from '../config.js';
 import { add, badge, card, choice, cssColor, el, facts, fmt, svg, toggle } from './dom.js';
 import { linePath, niceStep, plot } from './charts.js';
@@ -72,7 +74,7 @@ function openCar(id, page) {
   add(page.info,
     el('header', { class: 'title' },
       el('h2', {}, spec.name),
-      el('p', {}, badge(hero ? '主角車 hero' : '路人車 traffic', hero ? 'good' : ''), spec.year && ` ${spec.year} 年 · `, ` id: ${spec.id}`),
+      el('p', {}, badge(hero ? '主角車 hero' : '路人車 traffic', hero ? 'good' : ''), spec.year && ` ${spec.year} 年 · `, ` id: ${spec.id}`, spec.realName && ` · 現實對應：${spec.realName}`),
       el('p', { class: 'muted' }, hero ? '玩家可以駕駛，也會以街頭賽車手的身分出現在路上。' : '只由 AI 駕駛的一般車流；沒有引擎資料，也沒有駕駛艙。')),
     hero && performanceCard(spec),
     hero && engineCard(spec),
@@ -124,15 +126,23 @@ function addCockpit(car, viewer) {
 
 // ---- Measured performance ---------------------------------------------------------------------
 function performanceCard(spec) {
-  const m = measureCar(spec);
+  const rated = rateCar(spec), m = rated.measured;
   const tile = (value, unit, label) => el('div', { class: 'tile' }, el('b', {}, value), el('span', {}, unit), el('small', {}, label));
-  return card('實測性能',
+  const share = (key) => `${Math.round(RATING_WEIGHTS[key] * 100)}%`;
+  return card('評分與實測性能',
+    el('div', { class: 'tiles' },
+      tile(String(rated.rating), '／999', '綜合評分'),
+      tile(fmt(rated.accel, 0), '／100', `加速（佔 ${share('accel')}）`),
+      tile(fmt(rated.topSpeed, 0), '／100', `極速（佔 ${share('topSpeed')}）`),
+      tile(fmt(rated.handling, 0), '／100', `操控性（佔 ${share('handling')}）`)),
+    el('p', { class: 'note' }, '三項能力由下面的實測數字換算（固定的換算表在 vehicles/carRating.js，不會因為新增車輛而變動）：加速＝0–100 km/h 與前 400 m 各半；極速＝全油門一分鐘後的速度；操控性＝100 km/h 定速過彎的橫向加速度 60% ＋ 100–0 煞車距離 40%。'),
     el('div', { class: 'tiles' },
       tile(fmt(m.t100, 1), '秒', '0–100 km/h'),
       tile(fmt(m.t160, 1), '秒', '0–160 km/h'),
+      tile(fmt(m.t400m, 1), '秒', '0–400 m'),
       tile(fmt(m.top, 0), 'km/h', `極速（第 ${m.topGear} 檔）`),
       tile(fmt(m.brakeDist, 1), 'm', '100–0 km/h 煞車距離'),
-      tile(fmt(m.latG, 2), 'g', '過彎橫向加速度')),
+      tile(fmt(m.gripG, 2), 'g', '100 km/h 過彎橫向加速度')),
     facts([
       ['過彎滑移角', `${fmt(m.maxSlide, 0)}°${m.spun ? '（打轉了）' : ''}`, '第 3 檔約 90 km/h 方向盤打到底'],
       ['全油門出彎', `${fmt(m.powerSlide, 0)}°${m.spunPower ? '（打轉了）' : ''}`, '第 2 檔過彎中油門踩到底的甩尾角度'],
@@ -147,7 +157,8 @@ function performanceCard(spec) {
 }
 
 // ---- Engine: numbers and the torque / power chart ------------------------------------------------
-function engineCard(spec) {
+// (exported: the 引擎 section in partsPage.js shows the same card for an engine on its own)
+export function engineCard(spec) {
   const { idle, redline, torque } = spec.engine;
   // Read the curve the way the physics does, every 50 rpm.
   const curve = [];
@@ -165,31 +176,33 @@ function engineCard(spec) {
     svg('line', { x1: chart.X(redline), x2: chart.X(redline), y1: chart.top, y2: chart.bottom, class: 'redline' }),
     svg('path', { d: linePath(curve.map((p) => [chart.X(p.rpm), psY(p.watts / PS)])), class: 'line power' }),
     svg('path', { d: linePath(curve.map((p) => [chart.X(p.rpm), chart.Y(p.nm)])), class: 'line torque' }),
-    torque.filter(([rpm]) => rpm <= xMax).map(([rpm, nm]) => svg('circle', { cx: chart.X(rpm), cy: chart.Y(nm), r: 3.5, class: 'dot torque' })),     // the points written in car.json
+    torque.filter(([rpm]) => rpm <= xMax).map(([rpm, nm]) => svg('circle', { cx: chart.X(rpm), cy: chart.Y(nm), r: 3.5, class: 'dot torque' })),     // the points written in engines.json
     svg('text', { x: chart.left + 6, y: chart.top + 12, class: 'axis torque', 'text-anchor': 'start' }, 'Nm'),
     svg('text', { x: chart.right + 6, y: chart.top + 8, class: 'axis power', 'text-anchor': 'start' }, 'PS'),
     svg('text', { x: chart.left + 6, y: chart.bottom - 7, class: 'axis', 'text-anchor': 'start' }, '轉速 ×1000 rpm →'),
   );
-  return card('引擎',
+  return card(`引擎 · ${spec.engine.fullName}`,
     facts([
       ['最大扭力', `${fmt(peakTorque.nm, 0)} Nm @ ${peakTorque.rpm} rpm`],
       ['最大馬力', `${fmt(ps, 0)} PS（${fmt(peakPower.watts / 1000, 0)} kW）@ ${peakPower.rpm} rpm`],
-      ['馬力重量比', `${fmt(spec.mass / ps, 1)} kg/PS`],
+      spec.mass && ['馬力重量比', `${fmt(spec.mass / ps, 1)} kg/PS`],
       ['怠速／紅線', `${idle} ／ ${redline} rpm`],
+      ['型式', `${spec.engine.layout} · ${spec.engine.litres} L · ${spec.engine.aspiration}`, `現實對應：${spec.engine.realName}（content/engines.json 的 ${spec.engine.id}）`],
     ]),
-    el('div', { class: 'chart-title' }, '原廠曲線：', el('b', { class: 'torque' }, '━ 扭力 Nm（左軸，圓點是 car.json 的 engine.torque 資料點）'), '　', el('b', { class: 'power' }, '━ 由它換算的馬力 PS（右軸）')),
+    el('div', { class: 'chart-title' }, '原廠曲線：', el('b', { class: 'torque' }, '━ 扭力 Nm（左軸，圓點是 engines.json 的 torque 資料點）'), '　', el('b', { class: 'power' }, '━ 由它換算的馬力 PS（右軸）')),
     chart.node,
     el('p', { class: 'note' }, `圖上是真車的原廠數字。遊戲裡引擎扭力會再乘上 PHYSICS.powerBoost（目前 ×${PHYSICS.powerBoost}），`
       + `等於最大約 ${fmt(peakTorque.nm * PHYSICS.powerBoost, 0)} Nm／${fmt(ps * PHYSICS.powerBoost, 0)} PS——上面的「實測性能」就是用這個跑出來的。`));
 }
 
 // ---- Engine sound you can rev ------------------------------------------------------------------------
-// The rpm is acted out here (up while the button is held, back to idle when released) and fed
-// to the game's own audio.update(), which makes the sound exactly as it does while driving.
-function createRev(spec) {
-  const { idle, redline } = spec.engine, sweep = redline - idle;
+// The rpm is acted out by audio/revTest.js (the garage uses the same thing) and fed to the
+// game's own audio.update(), which makes the sound exactly as it does while driving.
+export function createRev(spec) {
+  const { idle, redline } = spec.engine;
   const profile = ENGINE_PROFILES[spec.sound] ? spec.sound : 'default';
-  const rev = { rpm: 0, running: false, held: false, cut: 0 };
+  const rev = createRevTest();
+  rev.setEngine(spec.engine);
 
   const fill = el('div', { class: 'rev-fill' }), readout = el('b', { class: 'rev-number' }, '0'), status = el('span', { class: 'muted' }, '引擎未發動');
   const bar = el('div', { class: 'rev-bar' }, fill, el('div', { class: 'rev-red', style: `left:${(redline / (redline + 500)) * 100}%` }));
@@ -201,7 +214,7 @@ function createRev(spec) {
     try {
       audio ??= createAudio();                    // browsers only allow sound after a click or key press, so it starts here
       window.catalog.audio = audio;               // (for the browser console: catalog.audio.level() = how loud it is right now)
-      await audio.start(profile);
+      await audio.start(soundOf(spec));
       audio.setPaused(false);
       status.textContent = '引擎運轉中';
     } catch (error) {
@@ -227,27 +240,23 @@ function createRev(spec) {
     el('div', { class: 'rev' }, button, el('button', { class: 'tool', onclick: stopEngine }, '熄火'), el('div', { class: 'rev-meter' }, bar, el('div', {}, readout, ' rpm　', status))),
     el('p', { class: 'note' }, '按住按鈕（或按住鍵盤 W／↑）轉速會衝向紅線並在斷油點彈跳，放開就落回怠速。聲音由遊戲的 audio.js 即時產生：四段真車錄音依轉速混合，再加上排氣失真、渦輪與回火。'),
     facts([
-      ['聲音設定', spec.sound ? `${spec.sound}` : '（car.json 沒有指定，使用 default）', spec.sound && !ENGINE_PROFILES[spec.sound] ? 'audio.js 裡沒有這個名字，遊戲會改用 default' : 'ENGINE_PROFILES，在 src/audio/audio.js'],
+      ['聲音設定', spec.sound ? `${spec.sound}` : '（引擎沒有指定，使用 default）', spec.sound && !ENGINE_PROFILES[spec.sound] ? 'audio.js 裡沒有這個名字，遊戲會改用 default' : 'ENGINE_PROFILES，在 src/audio/audio.js'],
       ['音高', `×${voice.pitch}`, '大於 1 = 聲音較高、像較小的引擎'],
       ['排氣', `亮度 ${voice.tone} Hz · 失真 ${voice.drive} · 諧波 ${voice.buzz}（第 ${voice.order} 階）`],
-      ['渦輪', voice.turbo > 0 ? `有（哨音與洩壓聲 ×${voice.turbo}）` : '無'],
-      ['機械增壓', voice.supercharger > 0 ? `有（×${voice.supercharger}）` : '無'],
+      ['錄音組 voice', voice.voice, 'VOICES，在 src/audio/audio.js：這種引擎的四段錄音'],
+      ['進氣增壓', { turbo: '渦輪（哨音與洩壓聲）', supercharger: '機械增壓（嘯聲）' }[spec.engine.induction] || '無', '由引擎（或車庫加裝的套件）決定'],
+      ['車體音染', spec.soundBody ? `共鳴 ${spec.soundBody.resonance} Hz · 亮度 ×${spec.soundBody.brightness}` : '無', 'car.json 的 soundBody'],
       ['回火機率', `收油 ${Math.round(voice.backfire[0] * 100)}% · 全油門升檔 ${Math.round(voice.backfire[1] * 100)}%`],
       ['音量', `×${voice.volume}`],
     ]));
 
   // Called every frame.
+  const act = rev.step;                           // (the rpm and the sound)
   rev.step = (dt) => {
-    if (!rev.running) rev.rpm = Math.max(0, rev.rpm - sweep * dt * 1.5);                    // switched off: the needle drops to zero
-    else if (rev.cut > 0) { rev.cut -= dt; rev.rpm -= sweep * dt * 0.9; }                    // on the limiter: fuel cut for a moment
-    else if (rev.held) { rev.rpm += (sweep * dt) / 1.1; if (rev.rpm >= redline) { rev.rpm = redline; rev.cut = 0.07; } }
-    else rev.rpm = Math.max(idle, rev.rpm - (sweep * dt) / 1.6);
+    act(dt, audio);
     fill.style.width = `${(rev.rpm / (redline + 500)) * 100}%`;
     fill.classList.toggle('hot', rev.rpm > redline * 0.93);
     readout.textContent = String(Math.round(rev.rpm / 10) * 10);
-    // The same call main.js makes every frame, for a car standing still in dry weather.
-    audio?.update({ rpm: Math.max(rev.rpm, idle * 0.5), throttle: rev.running && rev.held && rev.cut <= 0 ? 1 : 0, speed: 0, slip: 0, wheelSpin: 0, onGravel: false,
-      wet: 0, rain: 0, inside: false, scrape: 0, horn: false, trauma: 0, engineOff: !rev.running, shifting: false, redline, rival: null });
   };
   // Called when the user leaves this car.
   rev.stop = () => {
@@ -297,7 +306,7 @@ function gearboxCard(spec) {
     el('table', { class: 'table' },
       el('tr', {}, el('th', {}, '檔位'), spec.gears.map((_, i) => el('th', {}, String(i + 1))), el('th', {}, '終傳')),
       el('tr', {}, el('td', {}, '齒比'), spec.gears.map((ratio) => el('td', {}, fmt(ratio, 3))), el('td', {}, fmt(spec.finalDrive, 2)))),
-    el('p', { class: 'note' }, `後輪驅動，自動排檔（接近紅線升檔，油門踩到底會降檔）。遊戲把總齒比乘上 PHYSICS.gearing（目前 ×${PHYSICS.gearing}，小於 1 = 每一檔都能跑得更快）。`));
+    el('p', { class: 'note' }, `${{ rwd: '後輪驅動', fwd: '前輪驅動', awd: '四輪驅動' }[spec.drive]}，自動排檔（接近紅線升檔，油門踩到底會降檔）。遊戲把總齒比乘上 PHYSICS.gearing（目前 ×${PHYSICS.gearing}，小於 1 = 每一檔都能跑得更快）。`));
 }
 
 function looksCard(spec, cockpit) {
@@ -325,7 +334,7 @@ const doorCount = (spec) => (spec.doorLines ? (spec.doorLines.length - 1) * 2 : 
 // Anything in car.json this page has no card for yet (a field added to the game later) still shows up here.
 const SHOWN = ['id', 'folder', 'role', 'name', 'year', 'length', 'width', 'height', 'wheelbase', 'frontOverhang', 'wheelRadius', 'clearance', 'tumble', 'mass', 'colors', 'twoTone',
   'stations', 'windows', 'doorLines', 'headlights', 'taillights', 'nose', 'tail', 'doors', 'moulding', 'exhausts', 'spoiler', 'skirts', 'cargoBox', 'driverSide', 'gaugeColor', 'interior', 'frontWeight', 'cgHeight', 'dragArea',
-  'engine', 'gears', 'finalDrive', 'sound', 'grip', 'brakeG', 'model'];
+  'engine', 'gears', 'finalDrive', 'sound', 'grip', 'brakeG', 'model', 'brand', 'modelName', 'realName', 'stockEngine', 'drive', 'shiftTime', 'driveEfficiency', 'engineSwaps', 'soundBody', 'twoToneZone', 'kit', 'edgeRoll', 'flares', 'archGap', 'tuck', 'plates', 'side', 'pods'];
 function otherFieldsCard(spec) {
   const others = Object.entries(spec).filter(([key]) => !SHOWN.includes(key));
   return others.length ? card('其他欄位', facts(others.map(([key, value]) => [key, typeof value === 'object' ? JSON.stringify(value) : String(value)]))) : null;

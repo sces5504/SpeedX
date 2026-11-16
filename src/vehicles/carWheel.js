@@ -13,20 +13,25 @@ const rubber = new THREE.MeshStandardMaterial({ color: 0x0a0a0b, roughness: 0.88
 const alloy = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.28, metalness: 0.95, envMap: carReflection }), { limit: 0.6 });
 const darkAlloy = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.35, metalness: 0.9, envMap: carReflection }), { limit: 0.6 });
 const cache = new Map();     // wheels of the same size and style share their geometry
+const painted = new Map();   // rim colour -> its material (shared by every wheel in that colour)
 
 /**
  * @param radius  outside radius of the tyre (m)      @param width  tyre width (m)
- * @param style   { spokes: 5, dark: false }  — hero cars get dark deep-dish rims, traffic gets plain silver
+ * @param style   { spokes: 5, dark: false, color }  — hero cars get dark deep-dish rims, traffic gets plain silver;
+ *                color (a number) = rims painted that colour instead
  * @returns THREE.Group whose axle runs along X, with the pretty side at +X (flip it for left wheels)
  */
-export function buildWheel(radius, width, { spokes = 5, dark = false } = {}) {
+export function buildWheel(radius, width, { spokes = 5, dark = false, color } = {}) {
   const key = `${radius}|${width}|${spokes}`;
   if (!cache.has(key)) cache.set(key, { tyre: tyreGeometry(radius, width), rim: rimGeometry(radius, width, spokes) });
   const { tyre, rim } = cache.get(key);
   const wheel = new THREE.Group();
   const tyreMesh = new THREE.Mesh(tyre, rubber);
   tyreMesh.castShadow = true;
-  wheel.add(tyreMesh, new THREE.Mesh(rim, dark ? darkAlloy : alloy));
+  if (color !== undefined && !painted.has(color)) {
+    painted.set(color, enhanceMaterial(new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.85, envMap: carReflection }), { limit: 0.6 }));
+  }
+  wheel.add(tyreMesh, new THREE.Mesh(rim, color !== undefined ? painted.get(color) : dark ? darkAlloy : alloy));
   return wheel;
 }
 

@@ -24,6 +24,7 @@ Then open the address it prints (usually http://localhost:5173).
 | F | flash high beams (challenge a racer, ask traffic to move over) |
 | H | horn |
 | E | interact (refuel at a pump, start a time attack at an orange cone) |
+| GARAGE (main menu, pause menu) | change car, paint, engine and parts |
 | M | map — click a circle to travel there |
 | Backspace | put the car back on the road |
 | Esc | pause (rain and time of night are in this menu) |
@@ -37,12 +38,18 @@ src/config.js         every tweakable number: PHYSICS (grip/power/brake boosts),
                       shake, neck, motion blur, crash effects), GRAPHICS (bloom, streaks, colour,
                       damp road, mist, reflections), GAMEPLAY, KEYS
 src/core/             keyboard + mouse input, small math helpers
-src/world/            mapData (road + heights), terrain, road, sea, town (ordinary buildings), signals (traffic lights),
+src/world/            showroom (the bright room the garage shows your car in),
+                      mapData (road + heights), terrain, road, sea, town (ordinary buildings), signals (traffic lights),
                       sky (night stages, city lights),
                       weather (rain), and the shared library every map is built from:
                       library (the list, by name), plants, buildings, props (model files);
                       scenery (plants the roadside), pois (places stops and single objects)
-src/vehicles/         carSpecs (loads car folders), carShell (generated bodywork),
+src/vehicles/         carSpecs (loads car folders, the engine library and the name list),
+                      carSetup (factory car + what the owner changed = the one finished setup everything uses),
+                      carStats (measures a car by driving it), carRating (ability bars and the 1-999 rating),
+                      carLook (body parts: the car + what its owner chose to fit = the car to draw),
+                      carResources (frees a car's 3D data when it is thrown away),
+                      carShell (generated bodywork),
                       carEnds (lamps, grilles and trim laid on the nose and tail),
                       carDetails (lamp lenses, door lines, mirrors, handles, exhausts),
                       carWheel (generated wheels), carModel (prepares .glb models),
@@ -50,16 +57,21 @@ src/vehicles/         carSpecs (loads car folders), carShell (generated bodywork
                       hands, wipers), vehiclePhysics (how the car drives), playerCar
 src/ai/               aiCar (shared base), traffic (picks each map's rule set), trafficTwoLane
                       (the rules for a two-lane road), rivals (racers with skill levels 1-10)
-src/game/             collisions, challenge (near misses + time attack)
+src/game/             collisions, challenge (near misses + time attack), save (the player's save file)
 src/render/           cameras, materials (wet-road mirror, retroreflection, light beams),
                       smallLights (coloured glow from tail lamps and neon), reflections (what
                       car paint mirrors), postfx (film camera look), streak (streak filter), filters (optional looks), sparks,
                       drawDistance (only draws the pieces of the world that are near)
-src/audio/            engine, wind, rain, pass-bys, crashes
-src/ui/               HUD, map, menus, CSS
+src/audio/            engine, wind, rain, pass-bys, crashes; revTest (revving an engine on the spot, to listen to it)
+src/ui/               HUD, map, menus, garage (change car, paint, engine, parts), statBars (rating and ability bars), CSS
 src/catalog/          the catalogue page (catalog.html): browse everything in the game
 
 public/content/cars/<id>/    one folder per car: car.json (+ model.glb)      ← add-ons go here
+public/content/engines.json  the engine library: every engine, with its real factory figures
+public/content/cars/<id>/kit.json  optional: the body parts that car can be restyled with
+public/content/kits.json     shared body parts that fit any car (wings, skirts, scoops, rims, liveries)
+public/content/upgrades.json the performance parts: groups, options, and exactly what each one changes
+public/content/names.json    THE NAME LIST: the made-up brand and model names players see — edit it to rename things
 public/content/maps/<id>/    one folder per map: map.json + height.bin        ← and here
 public/content/props/        the shared library: index.json lists everything a map can use;
                              <id>/model.glb = an optional model for one of them
@@ -70,10 +82,14 @@ tools/osm-route.mjs      used by build-map for a LOOP or any drive through sever
 tools/build-places.mjs   drafts a map's "buildings" list from the real places beside its road
 tools/meshy-asset.sh     make a car or prop model with Meshy AI
 tools/build-audio.py     cut the sound clips
+tools/unpack-fmod-bank.py  take the recordings out of an FMOD .bank (Assetto Corsa sound mods)
+tools/shot-receiver.mjs  saves contact sheets the game page sends (how a script LOOKS at a car: see the tuning-parts skill)
+tools/check-audio.py     measure every engine loop: is its pitch what its label says, does it hold one speed, is it long enough
 tools/check-content.mjs  check every car and map folder for mistakes
 tools/check-car-shape.mjs  look for wrinkles in the generated bodywork of every car
-tools/physics-test.mjs   0-100, top speed, braking, cornering for each hero car
-.claude/skills/          speedx-add-car and speedx-add-map: step-by-step recipes for agents
+tools/physics-test.mjs   0-100, top speed, braking, cornering, rating and ability bars for each hero car
+tools/content.mjs        lets the tools load cars the same way the game does
+.claude/skills/          speedx-add-car, speedx-add-map and speedx-tuning-parts: step-by-step recipes for agents
 reference/               the Dash Cam screenshots, clips and source recordings
 ```
 
@@ -86,6 +102,57 @@ The game's code never changes. Full recipes (fields, model rules, how to check t
 another agent can follow them, but readable by people too.
 
 Run `node tools/check-content.mjs` after any change.
+
+## Cars: factory data, builds and ratings
+
+- **Three layers decide how a car performs**, always in this order (explained at the top of
+  `src/vehicles/carSetup.js`): the **stock** car (`car.json` + its engine in `engines.json`, real factory
+  numbers), the **build** (what the owner changed), and the **game tune** (the arcade dials in `PHYSICS`,
+  `src/config.js`, the same for every car). `setupCar()` returns one finished setup; the physics, the
+  rival AI, the rating and the menus are all handed that same object.
+- **Engines are a library.** A hero `car.json` names its engine (`"engine": "sr20det"`); the figures and
+  the engine's voice live in `public/content/engines.json`. When the real car's engine is not in the
+  library, pick the closest one that is.
+- **Rating.** `src/vehicles/carRating.js` drives the car through fixed tests (`carStats.js`: flat, dry,
+  standing start, full throttle; full brakes from 100 km/h; full steering at a steady 100 km/h) and turns the
+  results into three bars — ACCELERATION, TOP SPEED, HANDLING, 0-100 each — and one rating from 1 to 999
+  (40% / 25% / 35%). The points tables are fixed, so a car added later is scored on the same scale.
+  `node tools/physics-test.mjs` prints them; `src/ui/statBars.js` draws them (and the change between two setups).
+- **Parts.** `public/content/upgrades.json` lists the performance parts in groups (engine, turbo /
+  supercharger, ECU, gearbox, brakes, weight, tyres), a few options each, and the only things an option
+  may change (torque, red line, boost, weight, grip, braking, shift time, an extra gear, drivetrain loss).
+  Engine parts belong to the engine: swap the engine (`engineSwaps` in car.json says which fit) and each
+  engine keeps its own. Forced induction is one of three: a single turbo (late, big top end), twin turbos
+  (early, smooth) or a supercharger (everywhere). Which kinds an engine takes is its `fits` in
+  `engines.json`; a kit on a factory-turbo engine gives `factoryTurboShare` of its boost. `PHYSICS.powerBoost` was lowered to
+  1.3 when parts arrived: a factory car leaves room to grow.
+- **Garage and save file.** `src/ui/garage.js` is the test garage (everything free while
+  `GAMEPLAY.freeParts` is on): click = try it (the bars show the change), APPLY = fit it, CANCEL = put it
+  back. Each car keeps its own paint, engine and parts in the one save file (`src/game/save.js`,
+  `localStorage` key `speedx-save`), and gets them back on the next visit. Changing parts only swaps the
+  finished setup under the same 3D car; changing car rebuilds it, and `carResources.js` frees the old one.
+- **Body parts** (looks only, never performance). A car with `"kit": true` has a `kit.json` beside its
+  car.json: groups (front bumper, headlights, spoiler...) with options, each a small patch over car.json
+  (`src/vehicles/carLook.js` explains the format and lists the only fields a part may touch). Parts made
+  for one car's bodywork — bumpers, lamps — are written in that car's kit; parts the game builds from any
+  car's measurements — wings, skirts, scoops, wide arches, rim colours, liveries — are shared in
+  `public/content/kits.json` and a kit takes them with `{ "use": "rims" }`. Nothing is bolted onto a
+  finished body: the car is generated again with the patch, so bumpers and wide arches have no seams.
+  A whole-body kit can take over another group (`"blocks": ["skirts"]`). Every hero car has its own
+  bumpers and lamps; `s13` has the most. A car's own shape can also carry parts on its SIDES (`"side"`:
+  an intake behind the door, a panel in the second colour) and raised ducts on its engine cover (`"pods"`).
+- **The garage's room.** `src/world/showroom.js` is a small lit scene of its own; while the garage is open
+  the car stands in it (drag with the left mouse button to look round it, scroll to zoom, LIGHTS switches
+  its lamps). HOLD TO REV or W revs the engine on show (`src/audio/revTest.js`) — the one being tried, when
+  an engine or a turbo is being tried.
+- **Rating scale.** With today's tables a factory 130 PS coupe rates about 370, a 250 PS sports car about
+  570, a fully built one 700-850, and a 1000 PS four-wheel-drive hypercar about 865.
+- **Driven wheels.** `"drive"` in car.json: `rwd` (default), `fwd` or `awd` (`vehiclePhysics.js`).
+- **Car and driver are separate.** A rival's car has measured limits (cornering, braking, top speed, power);
+  the driver's skill level (1-10) is the share of those limits they use (`skillOf` in `src/ai/rivals.js`).
+- **Names.** Players never see a real make or model. Every name comes from `public/content/names.json`
+  (`brand` + `name`; `real` is a note for us). Change it there, reload, done. The brands are the made-up
+  ones in `reference/speedx/brands/`. Traffic cars are not part of any of this: no engine, no rating.
 
 ## How the picture is made
 
@@ -103,8 +170,9 @@ Everything is generated by code at start-up — no model or texture downloads.
   `public/content/props/index.json`. Any map uses them from its `map.json`: `"scenery"` (plants),
   `"pois"` (whole stops), `"objects"` (one lamp, sign or building anywhere along the road), `"ground"`.
   A model in `public/content/props/` replaces the built-in thing of the same name.
-- **Catalogue page.** `catalog.html` (the LIBRARY link in the main menu) shows every car, object,
-  plant, ground, stop, traffic rule set and map, with live 3D previews, each car's measured
+- **Catalogue page.** `catalog.html` (the LIBRARY link in the main menu) shows every car, engine (with a
+  rev button, bare or with a boost kit), body kit (on its car), object, plant, ground, stop, traffic rule
+  set and map, with live 3D previews, each car's measured
   performance and an engine you can rev. It has no data of its own: `src/catalog/` builds everything
   with the game's own functions and files, so it always shows the game as it is now. The performance
   figures come from `src/vehicles/carStats.js`, which `tools/physics-test.mjs` prints too.
@@ -177,7 +245,16 @@ Browser console helpers: `speedx.preview('<carId>')`, `speedx.setOrbit(angle, sp
 ## Sound
 
 `python3 tools/build-audio.py` cuts loops and one-shots out of the CC0 recordings in `reference/audio/`
-(sources in its README). Engine "voices" per car are the `ENGINE_PROFILES` in `src/audio/audio.js`.
+(sources in its README). The one exception is the V10 voice (`v10f1_*.wav`): Formula 1 V10 sounds by SHR
+Modding, unpacked with `tools/unpack-fmod-bank.py`, which **need their written consent before the game is
+published** (`reference/audio/acfan-f1-v10/acfan-f1-v10.md`). In `src/audio/audio.js`, `VOICES` are the sets of recordings (one per kind of engine)
+and `ENGINE_PROFILES` say which voice an engine uses and how its exhaust is shaped. Each engine in
+`engines.json` picks a profile with `"sound"`, so the sound follows the engine, not the car: swap the engine
+and the car sounds like the new one. A car adds a small colouring of its own (`soundBody` in car.json), and
+the turbo whistle / blow-off or supercharger whine plays whenever the engine has one, from the factory or
+from a kit fitted in the garage. Lifting off at high revs crackles in the exhaust. After cutting new loops run
+`python3 tools/check-audio.py`: it measures what nobody can check by ear a hundred times over (a loop whose
+loudest tone is not the engine, a loop that drifts in pitch, a loop too short not to be heard repeating).
 
 ## Data credits
 

@@ -1,0 +1,146 @@
+{
+  "about": [
+      "The engine library: every engine the game knows, with its REAL factory figures.",
+      "A car.json names one of these as its stock engine (\"engine\": \"<id>\"); an engine swap fits another one.",
+      "layout: I4, V6, V8, F4 (flat four), R2 (two-rotor)...   aspiration: na | turbo | supercharged | diesel",
+      "torque: full-throttle curve as [rpm, Nm] points from about 1000 rpm to the redline (3 or more points).",
+      "sound: the engine voice in src/audio/audio.js (ENGINE_PROFILES).",
+      "mass: kg, ready to run (an engine swap changes the car's weight by the difference).",
+      "fits: the kinds of forced-induction kit (upgrades.json) that can be bolted on: turbo, supercharger.",
+      "The names players see are NOT here: they are in names.json."
+  ],
+  "engines": {
+    "sr20det": {
+      "layout": "I4", "cylinders": 4, "litres": 2.0, "aspiration": "turbo",
+      "idle": 900, "redline": 7500,
+      "torque": [[1000, 150], [2500, 225], [3600, 274], [5000, 268], [6400, 228], [7500, 170]],
+      "sound": "turbo4", "mass": 165, "fits": ["turbo"]
+    },
+    "4age": {
+      "layout": "I4", "cylinders": 4, "litres": 1.6, "aspiration": "na",
+      "idle": 950, "redline": 7700,
+      "torque": [[1000, 95], [3000, 128], [5200, 149], [6600, 140], [7700, 112]],
+      "sound": "na4", "mass": 135, "fits": ["turbo", "supercharger"]
+    },
+    "k20a": {
+      "layout": "I4", "cylinders": 4, "litres": 2.0, "aspiration": "na",
+      "idle": 850, "redline": 8600,
+      "torque": [[1000, 140], [3000, 170], [5500, 180], [7000, 206], [8000, 193], [8600, 172]],
+      "sound": "vtec4", "mass": 140, "fits": ["turbo", "supercharger"]
+    },
+    "m102-evo": {
+      "layout": "I4", "cylinders": 4, "litres": 2.5, "aspiration": "na",
+      "idle": 900, "redline": 7700,
+      "torque": [[1000, 150], [3000, 205], [5000, 245], [6500, 240], [7200, 229], [7700, 200]],
+      "sound": "race4", "mass": 175, "fits": ["turbo", "supercharger"]
+    },
+    "ej207": {
+      "layout": "F4", "cylinders": 4, "litres": 2.0, "aspiration": "turbo",
+      "idle": 750, "redline": 8000,
+      "torque": [[1000, 150], [2500, 250], [3500, 380], [4400, 422], [6400, 307], [8000, 235]],
+      "sound": "boxer4", "mass": 155, "fits": ["turbo"]
+    },
+    "13b-rew": {
+      "layout": "R2", "cylinders": 2, "litres": 1.3, "aspiration": "turbo",
+      "idle": 850, "redline": 8000,
+      "torque": [[1000, 160], [3000, 250], [5000, 294], [6500, 272], [8000, 205]],
+      "sound": "rotary", "mass": 150, "fits": ["turbo"]
+    },
+    "20b-rew": {
+      "layout": "R3", "cylinders": 3, "litres": 2.0, "aspiration": "turbo",
+      "idle": 800, "redline": 7000,
+      "torque": [[1000, 250], [2000, 370], [3000, 402], [5000, 360], [6500, 303], [7000, 270]],
+      "sound": "rotary3", "mass": 200, "fits": ["turbo"]
+    },
+    "rb26dett": {
+      "layout": "I6", "cylinders": 6, "litres": 2.6, "aspiration": "turbo",
+      "idle": 950, "redline": 8000,
+      "torque": [[1000, 170], [2500, 265], [3500, 350], [4400, 392], [6800, 289], [8000, 236]],
+      "sound": "six26", "mass": 255, "fits": ["turbo"]
+    },
+    "2jz-gte": {
+      "layout": "I6", "cylinders": 6, "litres": 3.0, "aspiration": "turbo",
+      "idle": 700, "redline": 6800,
+      "torque": [[1000, 220], [2000, 380], [3600, 451], [5600, 351], [6800, 270]],
+      "sound": "six30", "mass": 265, "fits": ["turbo"]
+    },
+    "mezger38": {
+      "layout": "F6", "cylinders": 6, "litres": 3.8, "aspiration": "na",
+      "idle": 800, "redline": 8500,
+      "torque": [[1000, 280], [3000, 370], [4500, 400], [6250, 430], [7600, 402], [8500, 350]],
+      "sound": "flat6", "mass": 205, "fits": ["turbo", "supercharger"]
+    },
+    "vq35de": {
+      "layout": "V6", "cylinders": 6, "litres": 3.5, "aspiration": "na",
+      "idle": 700, "redline": 6600,
+      "torque": [[1000, 260], [2000, 310], [3500, 345], [4800, 371], [6200, 330], [6600, 300]],
+      "sound": "v6", "mass": 160, "fits": ["turbo", "supercharger"]
+    },
+    "vr38dett": {
+      "layout": "V6", "cylinders": 6, "litres": 3.8, "aspiration": "turbo",
+      "idle": 750, "redline": 7000,
+      "torque": [[1000, 300], [2000, 430], [3200, 588], [5200, 588], [6400, 527], [7000, 470]],
+      "sound": "v6tt", "mass": 276, "fits": ["turbo"]
+    },
+    "coyote50": {
+      "layout": "V8", "cylinders": 8, "litres": 5.0, "aspiration": "na",
+      "idle": 700, "redline": 7000,
+      "torque": [[1000, 400], [2500, 480], [4250, 542], [6500, 477], [7000, 430]],
+      "sound": "v8", "mass": 200, "fits": ["turbo", "supercharger"]
+    },
+    "m156": {
+      "layout": "V8", "cylinders": 8, "litres": 6.2, "aspiration": "na",
+      "idle": 700, "redline": 7200,
+      "torque": [[1000, 430], [2000, 510], [3500, 570], [5000, 600], [6800, 472], [7200, 430]],
+      "sound": "v8big", "mass": 196, "fits": ["turbo", "supercharger"]
+    },
+    "f136": {
+      "layout": "V8", "cylinders": 8, "litres": 4.5, "aspiration": "na",
+      "idle": 950, "redline": 9000,
+      "torque": [[1000, 330], [3250, 432], [4500, 500], [6000, 540], [9000, 445]],
+      "sound": "v8flat", "mass": 190, "fits": ["turbo", "supercharger"]
+    },
+    "s85": {
+      "layout": "V10", "cylinders": 10, "litres": 5.0, "aspiration": "na",
+      "idle": 750, "redline": 8250,
+      "torque": [[1000, 330], [3500, 450], [6100, 520], [7750, 460], [8250, 420]],
+      "sound": "v10smooth", "mass": 240, "fits": ["turbo", "supercharger"]
+    },
+    "v10-52": {
+      "layout": "V10", "cylinders": 10, "litres": 5.2, "aspiration": "na",
+      "idle": 1000, "redline": 8500,
+      "torque": [[1000, 350], [3000, 450], [4500, 500], [6500, 540], [8000, 492], [8500, 450]],
+      "sound": "v10", "mass": 258, "fits": ["turbo", "supercharger"]
+    },
+    "cgt57": {
+      "layout": "V10", "cylinders": 10, "litres": 5.7, "aspiration": "na",
+      "idle": 950, "redline": 8400,
+      "torque": [[1000, 380], [3000, 500], [5750, 590], [8000, 537], [8400, 495]],
+      "sound": "v10race", "mass": 210, "fits": ["turbo", "supercharger"]
+    },
+    "f140": {
+      "layout": "V12", "cylinders": 12, "litres": 6.3, "aspiration": "na",
+      "idle": 950, "redline": 8700,
+      "torque": [[1000, 450], [2500, 552], [4000, 640], [6000, 690], [8250, 630], [8700, 585]],
+      "sound": "v12", "mass": 250, "fits": ["turbo", "supercharger"]
+    },
+    "l539": {
+      "layout": "V12", "cylinders": 12, "litres": 6.5, "aspiration": "na",
+      "idle": 900, "redline": 8500,
+      "torque": [[1000, 450], [3000, 600], [5500, 690], [8250, 596], [8500, 570]],
+      "sound": "v12rasp", "mass": 235, "fits": ["turbo", "supercharger"]
+    },
+    "m120": {
+      "layout": "V12", "cylinders": 12, "litres": 6.0, "aspiration": "na",
+      "idle": 600, "redline": 6000,
+      "torque": [[1000, 450], [2000, 520], [3800, 570], [5200, 533], [6000, 440]],
+      "sound": "v12smooth", "mass": 300, "fits": ["turbo", "supercharger"]
+    },
+    "w16-80": {
+      "layout": "W16", "cylinders": 16, "litres": 8.0, "aspiration": "turbo",
+      "idle": 750, "redline": 6500,
+      "torque": [[1000, 700], [2200, 1250], [5500, 1250], [6000, 1172], [6500, 1000]],
+      "sound": "w16", "mass": 400, "fits": ["turbo"]
+    }
+  }
+}

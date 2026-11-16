@@ -7,7 +7,8 @@
 //
 // ENGINES. Four recorded loops (idle / low / mid / high revs) play all the time. Each is sped
 // up or slowed down to match the current RPM and only the one or two nearest that RPM are
-// heard. That signal is then split in two:
+// heard. Which four recordings depends on the ENGINE: every kind of engine (four, straight six,
+// V8, rotary...) has its own set, its VOICE (see VOICES below). That signal is then split in two:
 //   BASE     the engine itself: steady, slightly dull, always there. Follows RPM only, so
 //            when you lift off you still hear the revs fall.
 //   EXHAUST  the roar: distorted, bright and loud. Follows the THROTTLE (its "load"), swells
@@ -15,9 +16,17 @@
 //            during a gear change before slamming back in.
 // On top, each triggered by its own rule (see updateExtras):
 //   turbo         whistle follows built-up BOOST; one blow-off when you lift with boost up
-//   supercharger  a whine whose pitch follows RPM and loudness follows load (only if fitted)
-//   backfire      an occasional single pop when lifting at high revs or on a flat-out upshift
-// A car's "sound" in car.json picks a profile below. Add a profile to give a car a new voice.
+//   supercharger  a whine whose pitch follows RPM and loudness follows load
+//   afterfire     a burst of crackles from the exhaust when you lift at high revs, and
+//                 sometimes one bang on a flat-out upshift
+// WHO DECIDES WHAT YOU HEAR
+//   the engine   "sound" in content/engines.json names a profile below: the recordings (voice)
+//                and how the exhaust is shaped. Swap the engine and the car sounds like the new
+//                one; upgrade it and it keeps its voice.
+//   the car      "soundBody" in car.json: a small colouring by the body it sits in (a resonance
+//                and a brightness), so the same engine is slightly different in another car.
+//   induction    the turbo whistle / blow-off or the supercharger whine plays when the engine
+//                has one - from the factory or from a kit fitted in the garage.
 //
 // The mix is "cinematic": everything outside the car runs through a long
 // canyon echo, the cabin muffles the outside world, and a big crash drops the
@@ -25,36 +34,92 @@
 // ---------------------------------------------------------------------------
 import { clamp, lerp } from '../core/mathUtils.js';
 
-// pitch   >1 = higher, smaller-sounding engine         tone   how bright the exhaust is at full throttle (Hz)
-// drive   how hard the exhaust is distorted (rasp)     buzz   amount of added harmonic "brap", on harmonic `order`
-// turbo   whistle + blow-off amount (0 = no turbo)     supercharger  whine amount (0 = not fitted)
-// backfire  [chance when lifting at high revs, chance on a full-throttle upshift]
-// low     which recording fills the low-rev slot (default 'engine_low')
-export const ENGINE_PROFILES = {
-  turbo4: { pitch: 1.00, tone: 3000, drive: 1.6, buzz: 0.10, order: 1.0, turbo: 1.0, supercharger: 0, backfire: [0.5, 0.3], volume: 1.0 },    // SR20DET
-  na4:    { pitch: 1.12, tone: 4200, drive: 1.2, buzz: 0.22, order: 2.0, turbo: 0.0, supercharger: 0, backfire: [0.15, 0.05], volume: 0.95 }, // 4A-GE: revvy, induction rasp
-  rotary: { pitch: 1.45, tone: 5600, drive: 2.4, buzz: 0.45, order: 1.5, turbo: 0.7, supercharger: 0, backfire: [0.7, 0.45], volume: 0.95 },  // 13B: high buzz, spits flames
-  race4:  { pitch: 0.90, tone: 3600, drive: 2.8, buzz: 0.30, order: 1.0, turbo: 0.0, supercharger: 0, backfire: [0.35, 0.2], volume: 1.05, low: 'race_low' },  // big-bore 16-valve bark
-  default: { pitch: 1.05, tone: 3000, drive: 1.4, buzz: 0.12, order: 1.0, turbo: 0.0, supercharger: 0, backfire: [0.1, 0.05], volume: 0.9 },
+// A VOICE = the recordings of one kind of engine, from idle to the red line (clip names from
+// public/audio/clips.json, cut by tools/build-audio.py). Each recording is loudest at the engine
+// speed it was recorded at and fades into its neighbours. Where a kind of engine has no
+// recording of its own for part of the range, it borrows one from another engine:
+// ['clip', rpm] = "play that clip as if it had been recorded at this rpm" (the rpm at which
+// THIS engine fires as often as the borrowed one did).
+const F1 = 0.45;   // a Formula 1 V10 revs to 19,000 rpm, ours to about 8,500: see the v10 voice
+export const VOICES = {
+  i4: ['engine_idle', 'engine_low', 'engine_mid', 'engine_high'],                   // VW 2.0 turbo four
+  i4race: ['i4race_idle', 'race_low', 'i4race_mid', 'i4race_high'],                 // Mercedes 190E 2.3-16 (low revs: a vintage race four)
+  i6: ['i6_idle', 'i6_low', 'i6_mid', 'i6_high'],                                   // BMW idle, Toyota Supra turbo on the dyno
+  f4: ['f4_idle', 'f4_low', 'f4_mid', 'f4_high'],                                   // Subaru WRX low down, supercharged GT-86 higher up
+  f6: ['i6_idle', 'f6_low', 'f6_mid', 'i6_high'],                                   // Porsche 911 low down (idle and top end BORROWED from the straight six: same number of bangs)
+  v6: ['v6_idle', 'v6_low', 'v6_mid', 'v6_high'],                                   // Alfa Romeo Giulia Quadrifoglio
+  v8: ['v8_idle', 'v8_low', 'v8_mid'],                                              // cross-plane V8: Maserati low down, an American V8 flat out (nothing recorded in between)
+  v8t: ['v8t_idle', 'v8_low', 'v8t_mid', 'v8t_high'],                               // flat-plane exotic V8 (Maserati idle and low revs, then Ferrari F40)
+  // V10: a Lamborghini's idle, then Formula 1 V10s (Ferrari F2004, Renault R25). Each F1 recording is placed
+  // at 0.45 x the rpm it was recorded at, so the whole F1 range - idle to the 19,000 rpm scream - is spread
+  // over our road engines' range. That makes the note about an octave higher than a real road V10's: on
+  // purpose. A profile's `pitch` moves it back down (see v10 / v10smooth / v10race below).
+  v10: [['v10_idle', 1000], ['v10f1_idle', 3740 * F1], ['v10f1_low', 7650 * F1], ['v10f1_mid', 12210 * F1], ['v10f1_high', 19010 * F1]],
+  v12: ['v12_idle', 'v12_low', ['v8t_mid', 3930], ['v8t_high', 4690]],              // Ferrari 812 (above 2770 rpm: BORROWED from the flat-plane V8)
+  // Mazda rotary: RX-8 and RX-7 from 4290 rpm up. Nothing smooth was recorded lower: BORROWED from the four, which fires as often.
+  rotary: ['engine_idle', 'engine_low', 'rotary_low', 'rotary_mid', 'rotary_high'],
+  // No recording of a W16 exists in the library. BORROWED: the V12's idle, the V10 and the flat-plane V8.
+  w16: [['v12_idle', 725], ['v10_low', 2050], ['v8t_mid', 2945], ['v8t_high', 3520]],
 };
+// voice   which recordings (VOICES)                    firing  bangs per turn of the crank (cylinders / 2; rotors for a rotary)
+// pitch   >1 = higher, smaller-sounding engine         tone   how bright the exhaust is at full throttle (Hz)
+// drive   how hard the exhaust is distorted (rasp)     buzz   amount of added harmonic "brap", on harmonic `order` of the firing
+// turbo   how loud the whistle and blow-off are when the engine has a turbo (1 = normal)
+// backfire  [chance when lifting at high revs, chance on a full-throttle upshift]
+// bass    (optional) a fuller, deeper note, in decibels: lifts the engine's lowest note (its firing) and all below it
+// An engine in content/engines.json picks one of these with "sound". Two engines with the same
+// number of cylinders share recordings but not their shaping, so they still differ.
+export const ENGINE_PROFILES = {
+  // ---- fours ----
+  turbo4: { voice: 'i4', firing: 2, pitch: 1.00, tone: 3000, drive: 1.6, buzz: 0.10, order: 1.0, turbo: 1.0, backfire: [0.85, 0.35], volume: 1.0 },      // SR20DET
+  vtec4:  { voice: 'i4', firing: 2, pitch: 1.18, tone: 4800, drive: 1.3, buzz: 0.18, order: 2.0, turbo: 1.0, backfire: [0.5, 0.12], volume: 0.95 },   // K20A: higher and harder than the 4A-GE, screams to 8600
+  na4:    { voice: 'i4', firing: 2, pitch: 1.12, tone: 4200, drive: 1.2, buzz: 0.22, order: 2.0, turbo: 1.0, backfire: [0.5, 0.12], volume: 0.95 },   // 4A-GE: revvy, induction rasp
+  race4:  { voice: 'i4race', firing: 2, pitch: 1.00, tone: 3600, drive: 2.4, buzz: 0.12, order: 1.0, turbo: 1.0, backfire: [0.7, 0.25], volume: 1.05 }, // M102 16-valve: big-bore bark
+  boxer4: { voice: 'f4', firing: 2, pitch: 1.00, tone: 2800, drive: 1.7, buzz: 0.10, order: 0.5, turbo: 1.1, backfire: [0.85, 0.35], volume: 1.0 },    // EJ20: off-beat rumble
+  // ---- sixes ----
+  six26:  { voice: 'i6', firing: 3, pitch: 1.05, tone: 4200, drive: 1.9, buzz: 0.06, order: 1.0, turbo: 1.0, backfire: [0.85, 0.35], volume: 1.0 },      // RB26DETT: hard, metallic
+  six30:  { voice: 'i6', firing: 3, pitch: 0.94, tone: 3000, drive: 1.4, buzz: 0.04, order: 1.0, turbo: 1.2, backfire: [0.8, 0.3], volume: 1.0 },     // 2JZ-GTE: deeper, smoother, more turbo
+  flat6:  { voice: 'f6', firing: 3, pitch: 1.00, tone: 4600, drive: 1.9, buzz: 0.06, order: 1.0, turbo: 1.0, backfire: [0.7, 0.25], volume: 1.0 },     // Mezger flat six: dry, mechanical howl
+  v6:     { voice: 'v6', firing: 3, pitch: 0.97, tone: 3400, drive: 1.6, buzz: 0.08, order: 0.5, turbo: 1.0, backfire: [0.6, 0.2], volume: 1.0 },      // VQ35: the trumpet-like V6
+  v6tt:   { voice: 'v6', firing: 3, pitch: 0.92, tone: 4800, drive: 3.0, buzz: 0.09, order: 0.5, turbo: 1.3, backfire: [0.9, 0.4], volume: 1.06 },     // VR38: deep but angry - a hard, raspy bark that crackles when you lift
+  // ---- eights and up ----
+  v8:     { voice: 'v8', firing: 4, pitch: 1.00, tone: 2600, drive: 2.0, buzz: 0.08, order: 0.5, turbo: 1.0, backfire: [0.7, 0.25], volume: 1.05 },     // Coyote 5.0: cross-plane burble
+  v8big:  { voice: 'v8', firing: 4, pitch: 0.92, tone: 2400, drive: 2.3, buzz: 0.10, order: 0.5, turbo: 1.0, backfire: [0.85, 0.3], volume: 1.08 },    // AMG 6.2: lower, thunderous, crackles
+  v8flat: { voice: 'v8t', firing: 4, pitch: 1.00, tone: 5200, drive: 2.2, buzz: 0.05, order: 1.0, turbo: 1.0, backfire: [0.8, 0.35], volume: 1.0 },    // flat-plane exotic: wail
+  // (no added buzz on the V10s: it is tuned to a road engine's firing, and would be out of tune with the F1 recordings)
+  v10:    { voice: 'v10', firing: 5, pitch: 0.88, tone: 5400, drive: 1.7, buzz: 0, order: 1.0, turbo: 1.0, backfire: [0.75, 0.3], volume: 1.0 },      // Lamborghini 5.2: the lowest of the three, a howl
+  v10smooth: { voice: 'v10', firing: 5, pitch: 0.92, tone: 4800, drive: 1.4, buzz: 0, order: 1.0, turbo: 1.0, backfire: [0.5, 0.2], volume: 1.0 },   // BMW S85: smooth, metallic
+  v10race: { voice: 'v10', firing: 5, pitch: 1.00, tone: 6600, drive: 1.8, buzz: 0, order: 1.0, turbo: 1.0, backfire: [0.8, 0.35], volume: 1.03 },   // Carrera GT: the full F1 shriek
+  v12:    { voice: 'v12', firing: 6, pitch: 1.00, tone: 5600, drive: 1.6, buzz: 0.03, order: 1.0, turbo: 1.0, backfire: [0.6, 0.2], volume: 1.0, bass: 3 },
+  v12rasp: { voice: 'v12', firing: 6, pitch: 0.97, tone: 5000, drive: 2.1, buzz: 0.05, order: 1.0, turbo: 1.0, backfire: [0.85, 0.35], volume: 1.03, bass: 3 }, // Lamborghini: rougher, bangs on the overrun
+  v12smooth: { voice: 'v12', firing: 6, pitch: 0.9, tone: 3200, drive: 1.3, buzz: 0.02, order: 1.0, turbo: 1.0, backfire: [0.3, 0.1], volume: 0.97 },   // Mercedes M120: silky, low
+  w16:    { voice: 'w16', firing: 8, pitch: 0.62, tone: 2200, drive: 1.9, buzz: 0.08, order: 0.25, turbo: 1.4, backfire: [0.6, 0.2], volume: 1.08 },  // deep and breathy: four turbos
+  // ---- rotaries ----
+  rotary: { voice: 'rotary', firing: 2, pitch: 1.00, tone: 5600, drive: 2.0, buzz: 0.10, order: 1.5, turbo: 0.9, backfire: [0.9, 0.45], volume: 0.95 },  // 13B: buzz-saw, spits flames
+  rotary3: { voice: 'rotary', firing: 3, pitch: 1.50, tone: 6000, drive: 1.7, buzz: 0.08, order: 1.0, turbo: 0.9, backfire: [0.85, 0.4], volume: 0.95 },  // 20B: three rotors, half as many bangs again
+  default: { voice: 'i4', firing: 2, pitch: 1.05, tone: 3000, drive: 1.4, buzz: 0.12, order: 1.0, turbo: 1.0, backfire: [0.1, 0.05], volume: 0.9 },
+};
+// What a car's body adds when its car.json says nothing ("soundBody"): nothing at all.
+const PLAIN_BODY = { resonance: 0, brightness: 1 };
+// Everything the sound system needs to know about a car (a finished setup from vehicles/carSetup.js):
+//   profile    the engine's entry in ENGINE_PROFILES       induction  'turbo', 'supercharger' or null
+//   body       { resonance: Hz the shell booms at (0 = none), brightness: 1 = as recorded, more = brighter }
+//   turboSize  how big the turbo sounds (1 = factory; a big single is louder and lower, small twins quieter and higher)
+export const soundOf = (spec) => ({ profile: spec.sound, induction: spec.engine?.induction || null, turboSize: spec.engine?.turboSize ?? 1, body: { ...PLAIN_BODY, ...spec.soundBody } });
+const NO_CAR = { profile: 'default', induction: null, turboSize: 1, body: PLAIN_BODY };
 const IMPACT_LEVEL = 0.63;      // -4 dB, as asked for the real impact recordings
 const PASS_LEVEL = 0.4;         // pass-by whooshes sit well under your own engine
 const ENGINE_LEVEL = 1.9;       // your engine is the star of the mix
 const BASE_LEVEL = 0.30;        // the always-there engine bed, relative to the full exhaust roar
-// Four "slots" share the rev range; each plays one recording. `centre` = the rpm where that
-// slot is at full volume. The LOW slot has two candidate recordings: a profile picks one with
-// `low:` (e.g. the race engine's lumpy burble instead of the road car's smooth coasting sound).
-const ENGINE_LAYERS = [
-  { slot: 'idle', clip: 'engine_idle', centre: 900 }, { slot: 'low', clip: 'engine_low', centre: 2600 },
-  { slot: 'low', clip: 'race_low', centre: 2600 }, { slot: 'mid', clip: 'engine_mid', centre: 5000 },
-  { slot: 'high', clip: 'engine_high', centre: 6800 },
-];
-const SLOT_CENTRES = { idle: 900, low: 2600, mid: 5000, high: 6800 }, SLOTS = ['idle', 'low', 'mid', 'high'];
+const TURBO_LEVEL = 0.12;       // the turbo's whistle at full boost
+const BLOWOFF_LEVEL = 1.1;      // the blow-off ("tu-tu-tu") when you lift with boost up
+const CHARGER_LEVEL = 0.9;      // the supercharger's whine at full load
+const POP_LEVEL = 1.25;         // exhaust crackles and bangs
 
 export function createAudio() {
   const audio = { ready: false, start, preload, update() {}, impact() {}, crash() {}, passBy() {}, beep() {}, hornAt() {}, shift() {}, play() {}, setPaused() {}, clips: {} };
   let lastUpdate = 0;
-  let ctx, master, muffle, outside, cabinFilter, echo, noiseBuffer, probe, probeData, lastCheck = 0, profileName = 'default';
+  let ctx, master, muffle, outside, cabinFilter, echo, noiseBuffer, probe, probeData, lastCheck = 0, playerCar = NO_CAR;
   const buffers = {};                 // decoded recordings (kept if the sound system has to restart)
 
   // Download every recording listed in clips.json. main.js calls this as soon as the game opens, so
@@ -73,9 +138,10 @@ export function createAudio() {
   }
 
   // Browsers only allow sound after a click/key press, so this is called from the menu.
-  async function start(name) {
-    profileName = name || profileName;
-    if (ctx) { setProfile(playerEngine, profileName); ctx.resume(); return; }
+  // car = soundOf(the car being driven); leave it out to carry on with the same car.
+  async function start(car) {
+    playerCar = car || playerCar;
+    if (ctx) { setCar(playerEngine, playerCar); ctx.resume(); return; }
     // Decode every recording (only once). They were downloaded by preload() when the game opened.
     const Context = window.AudioContext || window.webkitAudioContext;
     ctx = new Context();
@@ -108,7 +174,7 @@ export function createAudio() {
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
 
     build();
-    setProfile(playerEngine, profileName);
+    setCar(playerEngine, playerCar);
     audio.ready = true;
   }
 
@@ -200,31 +266,44 @@ export function createAudio() {
   function makeEngine(destination) {
     const out = gainNode(0, destination);
     const pan = ctx.createStereoPanner(); pan.connect(out);
+    // The car body: a gentle boom at the frequency this shell resonates at (set by setCar).
+    const bass = filterNode('lowshelf', 300, 0, pan); bass.gain.value = 0;      // a fuller low end for engines that ask for it (profile.bass)
+    const body = filterNode('peaking', 140, 1.4, bass); body.gain.value = 0;
     const loops = ctx.createGain();                                  // the blended loops, before the split
     // BASE: the loops, gently dulled, at a steady level
-    const baseGain = gainNode(BASE_LEVEL, pan), baseTone = filterNode('lowpass', 1400, 0.5, baseGain);
+    const baseGain = gainNode(BASE_LEVEL, body), baseTone = filterNode('lowpass', 1400, 0.5, baseGain);
     loops.connect(baseTone);
     // EXHAUST: the loops pushed into distortion, through a filter that opens with load
-    const exhaustGain = gainNode(0, pan), tone = filterNode('lowpass', 1200, 0.7, exhaustGain);
+    const exhaustGain = gainNode(0, body), tone = filterNode('lowpass', 1200, 0.7, exhaustGain);
     const shaper = ctx.createWaveShaper(); shaper.oversample = '2x'; shaper.connect(tone);
     const push = gainNode(0.5, shaper);
     loops.connect(push);
-    const layers = ENGINE_LAYERS.map((layer) => {
-      const gain = gainNode(0, loops);
-      return { ...layer, gain, source: loopSource(buffers[layer.clip], gain), recordedRpm: audio.clips[layer.clip].rpm };
-    });
     // the added harmonic buzz lives in the exhaust
     const buzzGain = gainNode(0, push), buzzFilter = filterNode('bandpass', 400, 1.5, buzzGain);
     const buzz = ctx.createOscillator(); buzz.type = 'sawtooth'; buzz.connect(buzzFilter); buzz.start();
-    return { out, pan, baseTone, baseGain, exhaustGain, tone, shaper, push, layers, buzz, buzzGain, buzzFilter,
-      profile: ENGINE_PROFILES.default, load: 0, boost: 0, wasShifting: false };
+    return { out, pan, bass, body, loops, baseTone, baseGain, exhaustGain, tone, shaper, push, layers: [], voice: null, buzz, buzzGain, buzzFilter,
+      car: NO_CAR, profile: ENGINE_PROFILES.default, load: 0, boost: 0, wasShifting: false };
   }
-  function setProfile(engine, name) {
+  // Make this engine sound like `car` (see soundOf): its profile, its recordings, its body.
+  function setCar(engine, car) {
     if (!engine) return;
-    engine.profile = ENGINE_PROFILES[name] || ENGINE_PROFILES.default;
+    engine.car = car;
+    engine.profile = ENGINE_PROFILES[car.profile] || ENGINE_PROFILES.default;
     const curve = new Float32Array(512), k = engine.profile.drive;
     for (let i = 0; i < 512; i++) { const x = i / 256 - 1; curve[i] = Math.tanh(x * k) / Math.tanh(k); }
     engine.shaper.curve = curve;
+    set(engine.body.frequency, car.body.resonance || 140);
+    set(engine.body.gain, car.body.resonance ? 5 : 0);            // decibels
+    set(engine.bass.gain, engine.profile.bass || 0);              // decibels
+    // The recordings: stop the old voice's loops and start this voice's, lowest rpm first.
+    const voice = VOICES[engine.profile.voice] || VOICES.i4;
+    if (voice === engine.voice) return;
+    for (const layer of engine.layers) { layer.source.stop(); layer.gain.disconnect(); }
+    engine.voice = voice;
+    engine.layers = voice.map((entry) => [].concat(entry)).filter(([clip]) => buffers[clip]).map(([clip, rpm]) => {
+      const gain = gainNode(0, engine.loops);
+      return { gain, source: loopSource(buffers[clip], gain), rpm: rpm ?? audio.clips[clip].rpm };     // rpm: where this recording sounds as recorded
+    }).sort((a, b) => a.rpm - b.rpm);
   }
   /**
    * @param rpm       real engine speed: sets pitch and which loops are heard
@@ -234,19 +313,15 @@ export function createAudio() {
    */
   function driveEngine(engine, { rpm, throttle, shifting = false, volume, dt = 1 / 60 }) {
     const p = engine.profile;
-    for (const layer of engine.layers) {
-      // Blend: full volume at its own rpm, silent at its neighbours'. The square root keeps
-      // the TOTAL loudness level through a cross-fade (a straight blend dips in the middle).
-      const k = SLOTS.indexOf(layer.slot), centre = SLOT_CENTRES[layer.slot];
-      const below = k > 0 ? SLOT_CENTRES[SLOTS[k - 1]] : centre - 1500;
-      const above = k < SLOTS.length - 1 ? SLOT_CENTRES[SLOTS[k + 1]] : centre + 4000;
-      let weight = rpm < centre ? (rpm - below) / (centre - below) : (above - rpm) / (above - centre);
-      if (k === 0 && rpm < centre) weight = 1;
-      if (k === SLOTS.length - 1 && rpm > centre) weight = 1;
-      if (layer.slot === 'low' && layer.clip !== (p.low || 'engine_low')) weight = 0;   // the other car's low-rev recording
+    engine.layers.forEach((layer, k) => {
+      // Blend: full volume at its own rpm, silent at its neighbours'. Below the lowest recording
+      // and above the highest, that one plays alone. The square root keeps the TOTAL loudness
+      // level through a cross-fade (a straight blend dips in the middle).
+      const below = engine.layers[k - 1], above = engine.layers[k + 1];
+      const weight = rpm < layer.rpm ? (below ? (rpm - below.rpm) / (layer.rpm - below.rpm) : 1) : (above ? (above.rpm - rpm) / (above.rpm - layer.rpm) : 1);
       set(layer.gain.gain, Math.sqrt(clamp(weight, 0, 1)), 0.04);
-      set(layer.source.playbackRate, clamp((rpm * p.pitch) / layer.recordedRpm, 0.3, 3.2), 0.03);
-    }
+      set(layer.source.playbackRate, clamp((rpm * p.pitch) / layer.rpm, 0.3, 3.2), 0.03);
+    });
     // LOAD = how much the exhaust is working. Up almost at once when you press (40 ms), away
     // smoothly when you lift (0.35 s), and dumped during a gear change so you hear the
     // drive let go and bite again.
@@ -254,16 +329,17 @@ export function createAudio() {
     const rate = wanted > engine.load ? 1 / 0.04 : shifting ? 1 / 0.03 : 1 / 0.35;
     engine.load += (wanted - engine.load) * Math.min(1, dt * rate);
     const load = engine.load, revs = clamp(rpm / 8000, 0, 1.2);
-    const firing = rpm / 30;                                   // 4-cylinder / 2-rotor: two bangs per turn
+    const firing = (rpm / 60) * p.firing;                      // bangs per second
     set(engine.buzz.frequency, firing * p.order, 0.03);
     set(engine.buzzFilter.frequency, firing * p.order * 2.2);
     set(engine.buzzGain.gain, p.buzz * load * 1.2 * clamp(rpm / 6000, 0.1, 1.2), 0.03);
+    set(engine.bass.frequency, Math.max(250, firing * 2));     // the bass lift follows the firing note up the revs: the note gets all of it, the hiss above none
     // Base: always there, a little louder and brighter with revs. Never touched by the pedal.
     set(engine.baseTone.frequency, 900 + rpm * 0.28);
     set(engine.baseGain.gain, BASE_LEVEL * (0.7 + revs * 0.5));
     // Exhaust: thickness (push), brightness (tone) and volume all come from load.
     set(engine.push.gain, 0.4 + load * 1.5, 0.02);
-    set(engine.tone.frequency, 600 + load * (p.tone * 1.4) + rpm * 0.2, 0.02);
+    set(engine.tone.frequency, (600 + load * (p.tone * 1.4) + rpm * 0.2) * engine.car.body.brightness, 0.02);
     set(engine.exhaustGain.gain, load * (0.85 + revs * 0.25), 0.02);
     set(engine.out.gain, volume * p.volume, volume === 0 ? 0.25 : 0.05);
   }
@@ -273,7 +349,7 @@ export function createAudio() {
     playerEngine = makeEngine(master);
     rivalEngine = makeEngine(outside);
     turbo = noiseVoice('bandpass', 5000, 5, master);
-    // supercharger whine: a recorded Hellcat blower (only audible on cars whose profile has supercharger > 0)
+    // supercharger whine: a recorded Hellcat blower (only heard on an engine that has a supercharger)
     charger = clipVoice('supercharger', master);
     wind = noiseVoice('bandpass', 500, 0.4, outside);
     roll = noiseVoice('lowpass', 300, 0.7, master);
@@ -303,7 +379,7 @@ export function createAudio() {
    * state: { rpm, throttle, speed, slip 0..1, wheelSpin, onGravel, wet 0..1, rain 0..1, inside bool,
    *          scrape (m/s along a wall), horn bool, trauma 0..1 (crash daze), engineOff bool,
  *          shifting bool (gear change in progress), redline (rpm),
-   *          rival: { distance, side -1..1, rpm, throttle, sound } | null }
+   *          rival: { distance, side -1..1, rpm, throttle, car (its soundOf) } | null }
    */
   audio.update = (state) => {
     if (!audio.ready) return;
@@ -347,7 +423,7 @@ export function createAudio() {
     set(ring.gain, state.trauma * state.trauma * 0.05, 0.1);
 
     if (state.rival) {
-      if (rivalEngine.profile !== (ENGINE_PROFILES[state.rival.sound] || ENGINE_PROFILES.default)) setProfile(rivalEngine, state.rival.sound);
+      if (rivalEngine.car !== state.rival.car) setCar(rivalEngine, state.rival.car);
       const near = 1 / (1 + (state.rival.distance / 12) ** 2);
       driveEngine(rivalEngine, { rpm: state.rival.rpm, throttle: state.rival.throttle, dt, volume: near * 1.5 });
       set(rivalEngine.pan.pan, clamp(state.rival.side, -0.9, 0.9), 0.1);
@@ -443,36 +519,46 @@ export function createAudio() {
   // Forced induction and backfire for the player's engine. Each has its OWN trigger:
   function updateExtras(engine, state, shifting, dt) {
     const p = engine.profile, load = engine.load, high = state.rpm > (state.redline || 7000) * 0.6;
+    // (what is fitted: from the factory, or a kit from the garage)
+    const size = engine.car.turboSize, turboLevel = engine.car.induction === 'turbo' ? p.turbo * size : 0, chargerLevel = engine.car.induction === 'supercharger' ? 1 : 0;
     // TURBO: boost builds over ~0.8 s of load above 2800 rpm and bleeds away without it.
     // The whistle follows boost. Lifting with boost up fires ONE blow-off and empties the
     // boost, so it cannot fire again until the turbo has spooled up afresh.
-    const spooling = p.turbo > 0 && state.throttle > 0.5 && !shifting && state.rpm > 2800;
+    const spooling = turboLevel > 0 && state.throttle > 0.5 && !shifting && state.rpm > 2800;
     engine.boost = clamp(engine.boost + (spooling ? dt / 0.8 : -dt / 0.6), 0, 1);
-    set(turbo.gain.gain, p.turbo * engine.boost * 0.04, 0.08);
-    set(turbo.filter.frequency, 3200 + engine.boost * 2600 + state.rpm * 0.25);
-    if (p.turbo > 0 && engine.boost > 0.45 && state.throttle < 0.2) {
+    set(turbo.gain.gain, turboLevel * engine.boost * TURBO_LEVEL, 0.08);
+    set(turbo.filter.frequency, (3200 + engine.boost * 2600 + state.rpm * 0.25) / Math.sqrt(size));
+    if (turboLevel > 0 && engine.boost > 0.45 && state.throttle < 0.2) {
       // a real turbo letting go (two takes of a Ferrari F40's wastegate, picked at random)
-      audio.play(Math.random() < 0.5 ? 'blowoff1' : 'blowoff2', { volume: 0.55 * p.turbo * engine.boost, rate: 0.95 + Math.random() * 0.15, outsideBus: false });
+      audio.play(Math.random() < 0.5 ? 'blowoff1' : 'blowoff2', { volume: BLOWOFF_LEVEL * turboLevel * engine.boost, rate: (0.95 + Math.random() * 0.15) / Math.cbrt(size), outsideBus: false });
       engine.boost = 0;
     }
     // SUPERCHARGER: pitch is locked to the engine, loudness to load.
     set(charger.source.playbackRate, clamp(state.rpm / audio.clips.supercharger.rpm, 0.35, 1.6), 0.03);
-    set(charger.gain.gain, p.supercharger * load * 0.5, 0.05);
-    // BACKFIRE: a single pop, sometimes, at two moments - coming off the throttle at high revs,
-    // and at the start of a flat-out upshift.
+    set(charger.gain.gain, chargerLevel * load * CHARGER_LEVEL, 0.05);
+    // AFTERFIRE: fuel popping in the hot exhaust at two moments - coming off the throttle at
+    // high revs (a burst of crackles), and at the start of a flat-out upshift (one bang).
+    // (A lift only counts after the engine has pulled for a moment: dabbing the throttle does not crackle.)
+    engine.pulling = state.throttle > 0.7 ? (engine.pulling || 0) + dt : state.throttle >= 0.2 ? engine.pulling || 0 : 0;
     const lifted = engine.wasLoaded && state.throttle < 0.2, shiftStarted = shifting && !engine.wasShifting;
-    if (high && lifted && Math.random() < p.backfire[0]) backfire(0.9);
-    if (high && shiftStarted && state.throttle > 0.8 && Math.random() < p.backfire[1]) backfire(0.7);
-    engine.wasLoaded = state.throttle > 0.7 || (engine.wasLoaded && state.throttle >= 0.2);
+    if (high && lifted && Math.random() < p.backfire[0]) backfire(1, 2 + Math.floor(Math.random() * 3));
+    if (high && shiftStarted && state.throttle > 0.8 && Math.random() < p.backfire[1]) backfire(0.8, 1);
+    engine.wasLoaded = engine.pulling > 0.4;
     engine.wasShifting = shifting;
   }
-  // One recorded exhaust pop (five takes from an Audi R8; never the same one twice running).
+  // `count` recorded exhaust pops one after another, each a little quieter (five takes from an
+  // Audi R8; never the same one twice running). They go straight to the main mix, not through
+  // the cabin's muffling: this is the sound the player is listening for.
   let lastPop = 0;
-  function backfire(strength) {
-    let pick = 1 + Math.floor(Math.random() * 5);
-    if (pick === lastPop) pick = (pick % 5) + 1;
-    lastPop = pick;
-    audio.play('pop' + pick, { volume: (0.55 + Math.random() * 0.3) * strength, rate: 0.9 + Math.random() * 0.25 });
+  function backfire(strength, count = 1) {
+    let delay = 0;
+    for (let k = 0; k < count; k++) {
+      let pick = 1 + Math.floor(Math.random() * 5);
+      if (pick === lastPop) pick = (pick % 5) + 1;
+      lastPop = pick;
+      audio.play('pop' + pick, { volume: POP_LEVEL * (0.8 + Math.random() * 0.4) * strength * (1 - k * 0.15), rate: 0.9 + Math.random() * 0.25, delay, outsideBus: false });
+      delay += 0.07 + Math.random() * 0.1;
+    }
   }
   audio.beep = (frequency = 880, length = 0.12, volume = 0.12) => {
     if (!audio.ready) return;

@@ -11,6 +11,7 @@
 //                    (lamps and grilles on the nose and tail: carEnds.js;
 //                     body lines, mirrors and other fittings: carDetails.js)
 //   car.setLights()  convenient switchboard for all of the above
+//   car.dispose()    call when the car is thrown away: frees its 3D data (carResources.js)
 //
 // Local axes of a car: forward = -Z, right = +X, up = +Y. The origin is on the
 // ground under the centre of gravity.
@@ -25,11 +26,12 @@ import { beamMaterial, canvasTexture, enhanceMaterial, makeGlowTexture } from '.
 import { getCarModel } from './carModel.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { U, makeShell } from './carShell.js';
-import { addBodyDetails, buildCargoBox, buildLamp } from './carDetails.js';
-import { LAMP_COLOURS, buildEndParts, endParts } from './carEnds.js';
+import { addBodyDetails, buildCargoBox, buildLamp, chrome } from './carDetails.js';
+import { LAMP_COLOURS, buildEndParts, buildSideParts, endParts, flat } from './carEnds.js';
 import { buildWheel } from './carWheel.js';
 import { smallLights } from '../render/smallLights.js';
 import { carReflection } from '../render/reflections.js';
+import { claimResources, releaseResources } from './carResources.js';
 
 // Bodywork lit by headlights from a few metres away would be far brighter than anything else
 // in the picture and bloom into one huge white ball. This limit (see enhanceMaterial) lets it get
@@ -66,7 +68,7 @@ export function buildCar(spec, colorHex) {
   group.add(body);
 
   // ---- Body: a real model if the car has one, otherwise the generated shell ----------
-  let paint, partPaint, shell, surface = null;      // surface: where the generated skin is (carShell.js); a model has none
+  let paint, partPaint, painted, shell, surface = null;      // surface: where the generated skin is (carShell.js); a model has none
   if (model) {
     // White-painted models are tinted with the chosen colour (texture x colour).
     paint = model.material.clone();
@@ -75,7 +77,7 @@ export function buildCar(spec, colorHex) {
   } else {
     // Metallic paint under a glossy clear coat. vertexColors: the shell is darker underneath (carShell.js).
     const paintLook = { roughness: 0.42, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.07, envMap: carReflection, envMapIntensity: 1.25 };
-    const painted = (color, vertexColors) => enhanceMaterial(new THREE.MeshPhysicalMaterial({ color, ...paintLook, vertexColors }), { limit: PAINT_LIMIT });
+    painted = (color, vertexColors) => enhanceMaterial(new THREE.MeshPhysicalMaterial({ color, ...paintLook, vertexColors }), { limit: PAINT_LIMIT });
     paint = painted(colorHex, true);
     partPaint = painted(colorHex, false);                    // for bolted-on parts (mirrors, wing, lamp pods), which have no shading of their own
     const lower = spec.twoTone !== undefined ? painted(spec.twoTone, true) : paint;
@@ -102,6 +104,12 @@ export function buildCar(spec, colorHex) {
     return new THREE.Vector3(x, y, tail ? rearZ : frontZ);
   };
   const add = (mesh, x, y, z, parent = body) => { mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
+  // How high the top of the generated skin (bonnet, roof, boot) is at a spot: z along the car, x out from the centre line.
+  const topSkin = (z, x) => {
+    let best = null;
+    for (let u = U.glassLow; u <= U.centre; u += 0.25) { const point = surface.at(surface.tOf(z), u); if (!best || Math.abs(point.x - Math.abs(x)) < Math.abs(best.x - Math.abs(x))) best = point; }
+    return best.y;
+  };
   const box = (w, h, d, material) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
 
   // ---- Lamps, grilles and the rest of the nose and tail ----------------------------------
@@ -113,8 +121,11 @@ export function buildCar(spec, colorHex) {
   const parts = endParts(spec, halfW);
   if (surface) {
     // Generated car: every part is laid on the skin (carEnds.js).
-    const ends = buildEndParts(surface, parts);
+    // (finishes of this car's own: "paint2" = its second paint colour, for panels listed in nose / tail / side)
+    const own = spec.twoTone !== undefined ? { paint2: flat(painted(spec.twoTone, false)) } : {};
+    const ends = buildEndParts(surface, parts, own);
     body.add(...ends.meshes);
+    if (spec.side) body.add(...buildSideParts(surface, spec.side, own));
     for (const name in ends.lamps) lamps[name].push(...ends.lamps[name]);
   } else {
     // Real model: only the lamps, as flat plates stuck on its nose and tail.
@@ -146,7 +157,8 @@ export function buildCar(spec, colorHex) {
       if (surface) {
         // Shut, the lid lies in the bonnet: its front and rear edges just proud of it, tilted
         // along its slope. (Open, the lamp looks straight ahead.)
-        const bonnet = (z) => surface.at(surface.tOf(z), U.centre - 2).y;
+        // (the height of the bonnet under THIS pod: the skin is lower out at the sides than on the centre line)
+        const bonnet = (z) => topSkin(z, H.x * halfW);
         const front = bonnet(podZ - 0.15), rear = bonnet(podZ + 0.15);
         pod.userData.downY = (front + rear) / 2 + 0.008 - (H.h + 0.05) / 2;
         pod.userData.downTilt = -Math.atan2(rear - front, 0.3);
@@ -197,20 +209,58 @@ export function buildCar(spec, colorHex) {
       // Rear wing.  "spoiler": 1.0  = a body-colour blade at that height on two posts.
       // "spoiler": { "height": 1.2, "gt": true }  = a racing wing: a wide black blade with end
       // plates on two tall stays ("back": metres from the tail, default 0.2).
-      const wing = typeof spec.spoiler === 'number' ? { height: spec.spoiler } : spec.spoiler;
-      const material = wing.gt ? trimMat : detailPaint, z = rearZ - (wing.back ?? 0.2);
-      const deckY = surface.at(surface.tOf(z), U.centre).y, span = spec.width * (wing.gt ? 0.98 : 0.94);
-      add(new THREE.Mesh(new RoundedBoxGeometry(span, 0.03, wing.gt ? 0.3 : 0.24, 2, 0.012), material), 0, wing.height, z).rotation.x = 0.07;
-      for (const side of [-1, 1]) {
-        add(box(wing.gt ? 0.02 : 0.035, wing.height - deckY, wing.gt ? 0.2 : 0.16, material), side * halfW * (wing.gt ? 0.4 : 0.72), (wing.height + deckY) / 2, z);
-        if (wing.gt) add(box(0.015, 0.17, 0.34, material), side * span / 2, wing.height - 0.02, z);
+      // "spoiler": { "lip": true }  = a ducktail: a body-colour lip turned up along the edge of the boot.
+      // "rise" instead of "height" = metres above the boot (a shared part that fits any car).
+      const wing = typeof spec.spoiler === 'number' ? { height: spec.spoiler } : { ...spec.spoiler };
+      const material = wing.gt ? trimMat : detailPaint, z = rearZ - (wing.back ?? (wing.lip ? 0.07 : 0.2));
+      const deckY = surface.at(surface.tOf(z), U.centre).y;
+      wing.height ??= deckY + (wing.rise ?? 0.15);
+      const span = spec.width * (wing.gt ? 0.98 : wing.lip ? 0.86 : 0.94);
+      if (wing.lip) {
+        add(new THREE.Mesh(new RoundedBoxGeometry(span, 0.022, 0.17, 2, 0.01), material), 0, deckY + 0.03, z).rotation.x = -0.42;      // (turned UP toward the back)
+      } else {
+        add(new THREE.Mesh(new RoundedBoxGeometry(span, 0.03, wing.gt ? 0.3 : 0.24, 2, 0.012), material), 0, wing.height, z).rotation.x = -0.07;     // (a wing's trailing edge is the high one)
+        for (const side of [-1, 1]) {
+          add(box(wing.gt ? 0.02 : 0.035, wing.height - deckY, wing.gt ? 0.2 : 0.16, material), side * halfW * (wing.gt ? 0.4 : 0.72), (wing.height + deckY) / 2, z);
+          if (wing.gt) add(box(0.015, 0.17, 0.34, material), side * span / 2, wing.height - 0.02, z);
+        }
       }
     }
     if (spec.skirts) {
-      // Side skirts: a body-colour blade under each sill, from wheel arch to wheel arch.
-      const reach = spec.wheelRadius + 0.1, length = spec.wheelbase - 2 * reach;
-      for (const side of [-1, 1]) add(new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.1, length, 2, 0.02), detailPaint), side * (halfW - 0.03), spec.clearance + 0.03, (b - a) / 2);
+      // Side skirts: a slim body-colour blade that carries the door skin down past the sill, from wheel
+      // arch to wheel arch. It sits in the hollow under the door, so it does not stand out from the body.
+      // "skirts": true, or { "drop": metres deeper than that, "out": metres further out } for a bigger one.
+      const { drop = 0, out = 0 } = spec.skirts === true ? {} : spec.skirts;
+      const reach = spec.wheelRadius + 0.07, length = spec.wheelbase - 2 * reach;
+      for (const side of [-1, 1]) add(new THREE.Mesh(new RoundedBoxGeometry(0.028 + out, 0.06 + drop, length, 2, 0.012), detailPaint), side * (halfW - 0.034 + out / 2), spec.clearance + 0.035 - drop / 2, (b - a) / 2);
     }
+    // Scoops and vents. They sit on the centre line of the car and follow the slope of the panel they are on.
+    const onPanel = (mesh, t, x = 0, lift = 0) => {
+      const here = surface.at(t, U.centre), ahead = surface.at(t - 0.02, U.centre);
+      add(mesh, x, here.y + lift, here.z).rotation.x = Math.atan2(ahead.y - here.y, here.z - ahead.z);
+      return mesh;
+    };
+    // (a scoop is painted like the panel under it: the second colour where a band or a carbon bonnet runs there)
+    const banded = (zones) => (spec.twoTone !== undefined && zones.includes(spec.twoToneZone) ? painted(spec.twoTone, false) : detailPaint);
+    const scoop = (width, height, length, t, material) => {       // a raised intake, open (dark) at the front
+      onPanel(new THREE.Mesh(new RoundedBoxGeometry(width, height, length, 2, Math.min(0.025, height / 2.2)), material), t, 0, height * 0.3);
+      onPanel(box(width - 0.05, height * 0.55, 0.012, archMat), t - (length / 2 - 0.004) / spec.length, 0, height * 0.42);
+    };
+    // "pods": two long raised ducts side by side on the bonnet, roof or engine cover (a mid-engined car's
+    // intake snorkels). { "from", "to": t along the car, "x": metres from the centre line, "width", "height", "is": "chrome" | "paint" | "paint2" }
+    if (spec.pods) {
+      const { from, to, x, width, height, is = 'chrome' } = spec.pods;
+      const zA = frontZ + from * spec.length, zB = frontZ + to * spec.length, length = zB - zA;
+      const material = is === 'chrome' ? chrome : is === 'paint2' && spec.twoTone !== undefined ? painted(spec.twoTone, false) : detailPaint;
+      for (const side of [-1, 1]) {
+        const yA = topSkin(zA + 0.05, x), yB = topSkin(zB - 0.05, x);
+        add(new THREE.Mesh(new RoundedBoxGeometry(width, height, length, 3, Math.min(width, height) * 0.45), material), side * x, (yA + yB) / 2 + height * 0.25, (zA + zB) / 2).rotation.x = -Math.atan2(yB - yA, length - 0.1);
+      }
+    }
+    const cowlT = spec.stations.find((s) => s[4] === 'ws')[0];
+    if (spec.hood?.scoop) scoop(0.42, 0.055, 0.5, cowlT * 0.62, banded(['top', 'hood']));
+    if (spec.hood?.vents) for (const side of [-1, 1]) onPanel(box(0.26, 0.012, 0.34, trimMat), cowlT * 0.55, side * halfW * 0.4, 0.004);   // two black louvred panels
+    if (spec.roofScoop) scoop(0.34, 0.055, 0.46, surface.cabin.from + (surface.cabin.middle - surface.cabin.from) * 0.55, banded(['top']));
     if (spec.cargoBox) {
       const c = spec.cargoBox, length = (c.to - c.from) * spec.length;
       add(buildCargoBox(spec.width + 0.1, c.top - c.bottom, length), 0, (c.top + c.bottom) / 2, frontZ + (c.from + c.to) / 2 * spec.length);
@@ -224,13 +274,13 @@ export function buildCar(spec, colorHex) {
 
   // ---- Wheels (each one its own object so it can spin and steer) ---------------------
   const r = spec.wheelRadius, tyreWidth = r * 0.62;
-  const wheelStyle = spec.role === 'hero' ? { spokes: 8, dark: false } : { spokes: 5, dark: true };   // bright racing rims / plain dark ones
+  const wheelStyle = spec.role === 'hero' ? { spokes: 8, dark: false, color: spec.rimColor } : { spokes: 5, dark: true };   // bright racing rims ("rimColor": painted) / plain dark ones
   const wheels = [];
   ['FL', 'FR', 'RL', 'RR'].forEach((name, k) => {
     const side = k % 2 === 0 ? -1 : 1;
     const fromModel = model?.wheels[k];
     const z = fromModel ? fromModel.z : (k < 2 ? -a : b);
-    const x = fromModel ? fromModel.x : side * (dims.halfTrack - tyreWidth * 0.1);
+    const x = fromModel ? fromModel.x : side * (dims.halfTrack - tyreWidth * 0.1 + (spec.wheelOut ?? 0));      // ("wheelOut": wide-body cars push the wheels out to fill the arches)
     const pivot = new THREE.Group(), spin = new THREE.Group();
     pivot.name = 'wheel_' + name;
     pivot.position.set(x, r, z);
@@ -317,6 +367,8 @@ export function buildCar(spec, colorHex) {
     if (state.right) offer([lampSpots.tail[1]], 0xff8a00, 14);
   };
   car.setLights({ head: 0 });
+  claimResources(group);
+  car.dispose = () => { group.removeFromParent(); releaseResources(group); };
   return car;
 }
 
