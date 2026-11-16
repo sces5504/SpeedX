@@ -13,7 +13,16 @@ export function createHud() {
   const timerBox = $('timer-box'), timer = $('timer'), timerExtra = $('timer-extra');
   const popups = $('popups'), banner = $('banner'), prompt = $('prompt');
   const status = $('status');
-  let bannerTimer = 0, lastPrompt = '';
+  const navHint = $('nav-hint'), navArrow = $('nav-arrow'), navMetres = $('nav-metres'), navText = $('nav-text');
+  let bannerTimer = 0, lastPrompt = '', lastNav = '';
+  // The arrows of the route hint, as lines drawn in a 48 x 48 square.
+  const NAV_ARROWS = {
+    left: 'M34 42 V24 Q34 14 24 14 H10 M18 6 L10 14 L18 22',
+    right: 'M14 42 V24 Q14 14 24 14 H38 M30 6 L38 14 L30 22',
+    straight: 'M24 42 V8 M12 20 L24 8 L36 20',
+    back: 'M32 42 V18 Q32 8 22 8 Q12 8 12 18 V30 M4 22 L12 30 L20 22',
+    end: 'M14 42 V8 H36 L30 16 L36 24 H14',
+  };
 
   // Digital gauge in the style of an aftermarket dash display:
   // gear in a ring, rev arc that turns red near the limit, big green speed.
@@ -82,6 +91,20 @@ export function createHud() {
       banner.style.color = color;
       banner.classList.add('on');
       bannerTimer = seconds;
+    },
+
+    // The next instruction of the route being followed (null hides it):
+    //   { arrow: 'left' | 'right' | 'straight' | 'back' | 'end', metres, text, color }
+    setNav(hint) {
+      navHint.classList.toggle('hidden', !hint);
+      if (!hint) { lastNav = ''; return; }
+      const metres = hint.metres >= 1000 ? (hint.metres / 1000).toFixed(1) + ' km' : Math.max(10, Math.round(hint.metres / 10) * 10) + ' m';
+      const shown = hint.arrow + metres + hint.text + hint.color;
+      if (shown === lastNav) return;                             // (nothing to change: leave the page alone)
+      lastNav = shown;
+      navArrow.setAttribute('d', NAV_ARROWS[hint.arrow]);
+      navMetres.textContent = metres; navText.textContent = hint.text;
+      navHint.style.color = hint.color;
     },
 
     // "Press [E] to ..." — pass null to hide.

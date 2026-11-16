@@ -26,8 +26,8 @@
 // the car (carSetup.js) changes its bars by exactly what it does on the road.
 //
 // The same measurements also tell the AI drivers what their car can do
-// (`limits`): how hard it corners, brakes and how fast it goes. How much of
-// that a driver dares to USE is their skill - a separate thing, in ai/rivals.js.
+// (`limits`): how hard it corners, brakes and how fast it goes. Street racers all
+// use the same share of that (GAMEPLAY.racer in config.js): see ai/rivals.js.
 // ---------------------------------------------------------------------------
 import { clamp, lerp } from '../core/mathUtils.js';
 import { measureCar } from './carStats.js';

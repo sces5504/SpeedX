@@ -19,8 +19,9 @@ export function routeLength(points, closed = false) {
 // map's map.json (`info`) — so every installed map can be shown without loading it.
 export function drawRoutePreview(canvas, info) {
   const points = info.road, ctx = canvas.getContext('2d');
+  const lines = [{ road: points, loop: info.loop }, ...(info.roads || [])];      // the main road, then any others
   canvas.width = canvas.clientWidth * devicePixelRatio; canvas.height = canvas.clientHeight * devicePixelRatio;
-  const xs = points.map((p) => p[0]), zs = points.map((p) => p[1]);
+  const xs = lines.flatMap((line) => line.road.map((p) => p[0])), zs = lines.flatMap((line) => line.road.map((p) => p[1]));
   const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
   const pad = 14 * devicePixelRatio;
   const scale = Math.min((canvas.width - pad * 2) / (maxX - minX || 1), (canvas.height - pad * 2) / (maxZ - minZ || 1));
@@ -29,10 +30,12 @@ export function drawRoutePreview(canvas, info) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.lineJoin = ctx.lineCap = 'round';
   ctx.strokeStyle = '#cfd8d2'; ctx.lineWidth = 2 * devicePixelRatio;
-  ctx.beginPath();
-  points.forEach((point, i) => { const [x, y] = toScreen(point); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
-  if (info.loop) ctx.closePath();                            // a loop: join the end to the start
-  ctx.stroke();
+  for (const line of lines) {
+    ctx.beginPath();
+    line.road.forEach((point, i) => { const [x, y] = toScreen(point); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+    if (line.loop) ctx.closePath();                          // a loop: join the end to the start
+    ctx.stroke();
+  }
   // The stops, each `s` metres along the road.
   for (const poi of info.pois || []) {
     let left = poi.s, at = points[points.length - 1];
@@ -46,24 +49,40 @@ export function drawRoutePreview(canvas, info) {
   }
 }
 
-export function createMapView(map, onPickPoi) {
+// onPickPoi(poi) = a stop was clicked; onPickPlace(x, z) = somewhere else on the map was clicked.
+export function createMapView(map, onPickPoi, onPickPlace) {
   const { road } = map;
   const mini = document.getElementById('minimap'), miniCtx = mini.getContext('2d');
   const full = document.getElementById('map-canvas'), fullCtx = full.getContext('2d');
   const screen = document.getElementById('map-screen');
 
   // Shared drawing routine. `toScreen` converts world (x, z) to canvas pixels.
-  function draw(ctx, toScreen, { player, others, challenge, labels, stride }) {
+  function draw(ctx, toScreen, { player, others, challenge, labels, stride, route, routeColor, goal }) {
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (const [color, width] of [['rgba(0,0,0,0.8)', labels ? 7 : 6], ['#cfd8d2', labels ? 3 : 3.2]]) {
       ctx.strokeStyle = color; ctx.lineWidth = width;
-      ctx.beginPath();
-      for (let i = 0; i < road.count; i += stride) {
-        const [x, y] = toScreen(road.x[i], road.z[i]);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      for (const way of map.ways) {                          // every road of the map
+        ctx.beginPath();
+        for (let i = 0; i < way.road.count; i += stride) {
+          const [x, y] = toScreen(way.road.x[i], way.road.z[i]);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        const [x, y] = toScreen(way.road.x[way.road.count - 1], way.road.z[way.road.count - 1]);
+        ctx.lineTo(x, y);                                    // (right to its last point: that is where it joins the next road)
+        if (way.road.closed) ctx.closePath();                // a loop: join the end to the start
+        ctx.stroke();
       }
-      if (road.closed) ctx.closePath();                      // a loop: join the end to the start
+    }
+    // The way to go (a race's shortest way to its gate, or to the destination picked on this map).
+    if (route) {
+      ctx.strokeStyle = routeColor; ctx.lineWidth = labels ? 5 : 4;
+      ctx.beginPath();
+      route.forEach((point, i) => { const [x, y] = toScreen(point[0], point[1]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
       ctx.stroke();
+    }
+    if (goal) {
+      const [x, y] = toScreen(goal.x, goal.z);
+      ctx.fillStyle = routeColor; ctx.beginPath(); ctx.arc(x, y, labels ? 8 : 5, 0, 7); ctx.fill();
     }
     for (const poi of map.pois) {
       const [x, y] = toScreen(road.x[poi.index], road.z[poi.index]);
@@ -89,13 +108,13 @@ export function createMapView(map, onPickPoi) {
 
   // Bounding box of the whole road, for the full map.
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (let i = 0; i < road.count; i++) {
-    minX = Math.min(minX, road.x[i]); maxX = Math.max(maxX, road.x[i]);
-    minZ = Math.min(minZ, road.z[i]); maxZ = Math.max(maxZ, road.z[i]);
+  for (const way of map.ways) for (let i = 0; i < way.road.count; i++) {
+    minX = Math.min(minX, way.road.x[i]); maxX = Math.max(maxX, way.road.x[i]);
+    minZ = Math.min(minZ, way.road.z[i]); maxZ = Math.max(maxZ, way.road.z[i]);
   }
 
   // Click a place on the full map to travel there.
-  let toScreenFull = null;
+  let toScreenFull = null, toWorldFull = null;
   full.addEventListener('click', (e) => {
     if (!toScreenFull) return;
     const rect = full.getBoundingClientRect(), scale = full.width / rect.width;
@@ -104,6 +123,7 @@ export function createMapView(map, onPickPoi) {
       const [x, y] = toScreenFull(road.x[poi.index], road.z[poi.index]);
       if (Math.hypot(x - cx, y - cy) < 26 * devicePixelRatio) { onPickPoi(poi); return; }
     }
+    onPickPlace(...toWorldFull(cx, cy));                     // anywhere else: a destination to be shown the way to
   });
 
   return {
@@ -125,6 +145,7 @@ export function createMapView(map, onPickPoi) {
       fullCtx.clearRect(0, 0, full.width, full.height);
       fullCtx.save();
       toScreenFull = (x, z) => [ox + (x - minX) * scale, oz + (z - minZ) * scale];
+      toWorldFull = (px, py) => [minX + (px - ox) / scale, minZ + (py - oz) / scale];
       draw(fullCtx, toScreenFull, { ...info, labels: true, stride: 2 });
       fullCtx.restore();
       fullCtx.fillStyle = '#9fb3a6'; fullCtx.font = `${12 * devicePixelRatio}px Menlo, monospace`;

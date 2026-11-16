@@ -17,6 +17,7 @@ import { FEEL, FIRST_TIME, GAMEPLAY, GRAPHICS, ROAD } from './config.js';
 import { input } from './core/input.js';
 import { clamp, damp, formatTime, smoothstep } from './core/mathUtils.js';
 import { loadMap, loadMapInfo, listMaps } from './world/mapData.js';
+import { createRoadNet } from './world/roadNet.js';
 import { buildTerrain } from './world/terrain.js';
 import { buildRoad } from './world/road.js';
 import { buildScenery } from './world/scenery.js';
@@ -40,6 +41,8 @@ import { createRivals } from './ai/rivals.js';
 import { collideCars } from './game/collisions.js';
 import { createChallenge } from './game/challenge.js';
 import { save } from './game/save.js';
+import { career } from './game/career.js';
+import { addDevCommands } from './game/devCommands.js';
 import { createCameras } from './render/cameras.js';
 import { createPostFx } from './render/postfx.js';
 import { FILTERS } from './render/filters.js';
@@ -47,6 +50,7 @@ import { createSparks } from './render/sparks.js';
 import { shared, makeHeadlightCookie } from './render/materials.js';
 import { smallLights } from './render/smallLights.js';
 import { createCarProbe } from './render/reflections.js';
+import { createNavArrows } from './render/navArrows.js';
 import { createAudio, soundOf } from './audio/audio.js';
 import { createRevTest } from './audio/revTest.js';
 import { createShowroom } from './world/showroom.js';
@@ -54,6 +58,7 @@ import { createHud } from './ui/hud.js';
 import { createMapView } from './ui/mapView.js';
 import { createMenu } from './ui/menu.js';
 import { createGarage } from './ui/garage.js';
+import { createDevConsole } from './ui/devConsole.js';
 
 // ---- Renderer and scene -------------------------------------------------------
 const canvas = document.getElementById('game');
@@ -72,6 +77,7 @@ await Promise.all([preloadCarModels(Object.values(ALL_CARS)), loadProps()]);
 const mapList = await listMaps();
 const wantedMap = new URLSearchParams(location.search).get('map') || localStorage.getItem('speedx-map');
 const map = await loadMap(mapList.maps.includes(wantedMap) ? wantedMap : mapList.default);
+const net = createRoadNet(map);                 // finding the way round the map's roads (world/roadNet.js)
 scene.add(buildTerrain(map), buildRoad(map), buildScenery(map));
 const sea = buildSea(map);                      // null on a map with no sea
 if (sea) scene.add(sea.mesh);
@@ -99,7 +105,10 @@ const challenge = createChallenge(scene, map);
 const audio = createAudio();
 audio.preload().catch(() => {});       // download every sound now, so pressing DRIVE does not have to wait for them
 const hud = createHud();
-const mapView = createMapView(map, (poi) => travelTo(poi));
+const mapView = createMapView(map, (poi) => travelTo(poi), (x, z) => setDestination(x, z));
+// Navigation: a place the player picked on the map screen, and the shortest way there from the car.
+const nav = { goal: null, route: null };
+const navArrows = createNavArrows(scene);       // the way to go, drawn on the road (render/navArrows.js)
 
 // A few real lights are shared between all lamps and AI cars: each frame they
 // jump to whichever lamps/cars are closest to you. (Hundreds of real lights
@@ -125,9 +134,9 @@ const parked = pois.parking.filter((_, i) => i % 2 === 0).map((spot, i) => {
 });
 
 // Buildings, pumps, columns and lamp posts: solid and immovable, like the parked cars.
-const solids = [...parked, ...pois.obstacles.map((o) => ({ ...o, active: true, vx: 0, vz: 0, yawRate: 0, mass: 1e6, yawInertia: 1e9 }))];
+const solids = [...parked, ...[...pois.obstacles, ...signals.obstacles].map((o) => ({ ...o, active: true, vx: 0, vz: 0, yawRate: 0, mass: 1e6, yawInertia: 1e9 }))];
 
-const traffic = createTraffic(scene, map);
+const traffic = createTraffic(scene, map, net);
 let player = null, rivals = null;
 let state = 'menu';            // 'menu' | 'driving' | 'paused'
 let time = 0, frame = 0, impactCooldown = 0, lastCountdown = 0, wasThrottle = 0, lastRaceState = 'none', lastGear = 1;
@@ -144,35 +153,77 @@ const setupOf = (carId, look = save.car(carId).look) => dressCar(setupCar(HERO_C
 
 function spawnPlayer(carId) {
   // Changing car from the pause menu keeps your place on the road; the first start is at the gas station.
-  const previous = player && everDriven ? { s: player.s, dir: playerDirection() } : null;
+  const previous = player && everDriven ? { s: player.s, dir: playerDirection(), way: player.way } : null;
   if (player) player.dispose();
   if (rivals) for (const ai of rivals.cars) ai.car.dispose();
   player = createPlayer(scene, map, setupOf(carId), save.car(carId).color, rig.mirrorTarget.texture);
-  if (previous) player.placeAt(previous.s, map.laneCentre(previous.s, 1), previous.dir);
+  if (previous) player.placeAt(previous.s, previous.way.laneCentre(previous.s, 1), previous.dir, previous.way);
   else player.placeAt(startPoi.s - 30, startPoi.side * (ROAD.barrierOffset + startPoi.shift + 3), 1);       // start in the gas station lot
   player.update(1 / 60, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);
   rig.snapTo(player);
-  rivals = createRivals(scene, map, carId);
+  rivals = createRivals(scene, map, net, player.spec);
   const info = playerInfo();
-  traffic.reset(info.s, [info]);
+  traffic.reset(info, [info]);
   rivals.reset(info, [info, ...traffic.cars]);
 }
 
-// Fast travel from the map screen: put the car in that lot and restart the traffic around it.
-function travelTo(poi) {
+// Put the car somewhere else on the road (s metres along, d metres right of centre) and restart
+// the traffic around it. `name` is shown on arrival.
+// way = which road (the main one unless told otherwise).
+function teleport(s, d, name, way = map.ways[0]) {
   challenge.cancel();
-  player.placeAt(poi.s, poi.side * (ROAD.barrierOffset + poi.shift + 3), 1);
+  player.placeAt(s, d, 1, way);
+  player.update(1 / 60, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);      // (so the car knows at once which road it is on)
   rig.snapTo(player);
   const info = playerInfo();
-  traffic.reset(info.s, [info]);
+  traffic.reset(info, [info]);
   rivals.reset(info, [info, ...traffic.cars]);
-  mapView.toggle(false);
-  hud.popup(poi.name.toUpperCase(), 'info');
+  updateNavigation();
+  hud.popup(name.toUpperCase(), 'info');
+}
+// Where the car is along the MAIN road (the time attack is still run along that one road only).
+const mainRoadS = () => (player.way === map.ways[0] ? player.s : map.project(player.vehicle.x, player.vehicle.z).s);
+
+// Navigation. Clicking a road on the map screen sets a destination there (clicking it again takes
+// it away); the map then shows the shortest way to it from wherever the car is.
+function setDestination(x, z) {
+  const spot = map.locate(x, z), at = spot.way.pointAt(spot.s, 0);
+  const same = nav.goal && Math.hypot(at.x - nav.goal.x, at.z - nav.goal.z) < 60;
+  nav.goal = same ? null : { way: spot.way, s: spot.s, x: at.x, z: at.z };
+  updateNavigation();
+  if (mapView.open) mapView.drawFull(mapInfo());
+}
+function updateNavigation() {
+  nav.route = nav.goal ? net.findRoute({ way: player.way, s: player.s }, nav.goal) : null;
+  if (nav.route && nav.route.length < 25) { nav.goal = nav.route = null; hud.popup('ARRIVED', 'info'); }
 }
 
+// The way to go, shown where the driver is looking: chevrons on the road and, at the top of the
+// screen, the next instruction (turn left in 300 m...). A race's route to its gate comes first,
+// otherwise the way to the destination picked on the map.
+function showTheWay() {
+  const race = rivals.race, racing = race.state === 'racing' && race.route;
+  const route = racing ? race.route : nav.route, color = racing ? '#57ff9a' : '#59d7e6';
+  navArrows.update(route, net, color, time, racing || frame % 20 === 0);
+  if (!route) { hud.setNav(null); return; }
+  const first = route.legs[0], turn = net.nextTurn(route);
+  const wrongWay = first.way === player.way && first.dir !== playerDirection() && player.vehicle.speed > 2;
+  const end = racing ? 'TO THE GATE' : 'DESTINATION';
+  if (wrongWay) hud.setNav({ arrow: 'back', metres: route.length, text: 'TURN ROUND', color });
+  else if (!turn.side) hud.setNav({ arrow: turn.metres < 150 ? 'end' : 'straight', metres: turn.metres, text: end, color });
+  else hud.setNav({ arrow: turn.side < 0 ? 'left' : 'right', metres: turn.metres, text: turn.side < 0 ? 'TURN LEFT' : 'TURN RIGHT', color });
+}
+
+// Fast travel from the map screen: into that stop's lot.
+function travelTo(poi) {
+  teleport(poi.s, poi.side * (ROAD.barrierOffset + poi.shift + 3), poi.name);
+  mapView.toggle(false);
+}
+
+// Which way along its road the car points: +1 up the road, -1 down.
 function playerDirection() {
-  const i = Math.max(0, player.vehicle.roadIndex);
-  const along = -Math.sin(player.vehicle.yaw) * map.road.tx[i] - Math.cos(player.vehicle.yaw) * map.road.tz[i];
+  const i = Math.max(0, player.vehicle.roadIndex), { road } = player.way;
+  const along = -Math.sin(player.vehicle.yaw) * road.tx[i] - Math.cos(player.vehicle.yaw) * road.tz[i];
   return along >= 0 ? 1 : -1;
 }
 
@@ -180,8 +231,8 @@ function playerDirection() {
 // stand-in in their "who is ahead of me?" checks).
 function playerInfo() {
   const v = player.vehicle, dir = playerDirection();
-  return { isPlayer: true, active: true, s: player.s, d: player.d, dir, speed: Math.max(0, v.forwardSpeed),
-    halfWidth: v.halfWidth, front: v.front, rear: v.rear,
+  return { isPlayer: true, active: true, way: player.way, s: player.s, d: player.d, dir, speed: Math.max(0, v.forwardSpeed),
+    x: v.x, z: v.z, vx: v.vx, vz: v.vz, halfWidth: v.halfWidth, front: v.front, rear: v.rear,
     flashing: player.flashing, flashPressed: input.wasPressed('flash'), honking: input.isHeld('horn') };
 }
 
@@ -265,7 +316,7 @@ function updateShowroom(dt) {
 
 // The same car with other body parts (or the same ones again): the 3D car is built afresh where it stands.
 function redressPlayer(look, colorIndex) {
-  const v = player.vehicle, place = { x: v.x, z: v.z, yaw: v.yaw, roadIndex: v.roadIndex }, lights = player.lightMode, carId = player.carId;
+  const v = player.vehicle, place = { x: v.x, z: v.z, yaw: v.yaw, roadIndex: v.roadIndex, way: v.way }, lights = player.lightMode, carId = player.carId;
   player.dispose();
   player = createPlayer(scene, map, setupOf(carId, look), colorIndex, rig.mirrorTarget.texture);
   Object.assign(player.vehicle, place);
@@ -296,7 +347,7 @@ function updateDriving(dt) {
   // 1. Keys that switch things
   if (input.wasPressed('camera')) rig.toggle();
   if (input.wasPressed('lights')) { player.lightMode = (player.lightMode + 1) % 3; hud.popup(['LIGHTS OFF', 'LOW BEAM', 'HIGH BEAM'][player.lightMode], 'info'); }
-  if (input.wasPressed('reset')) { player.placeAt(player.s, map.laneCentre(player.s, 1), playerDirection()); rig.snapTo(player); }
+  if (input.wasPressed('reset')) { player.placeAt(player.s, player.way.laneCentre(player.s, 1), playerDirection(), player.way); rig.snapTo(player); }
   player.flashing = input.isHeld('flash');
 
   // 2. Drive
@@ -397,7 +448,7 @@ function updateDriving(dt) {
       ai.passArmed = false;
     }
   });
-  challenge.update(dt, player.s);
+  challenge.update(dt, mainRoadS());
   updateRaceHud();
   updateInteraction(v);
 
@@ -425,7 +476,10 @@ function updateDriving(dt) {
     extra: `${race.playerProgress >= race.rivalProgress ? 'AHEAD' : 'BEHIND'} ${Math.abs(race.playerProgress - race.rivalProgress).toFixed(0)} m · ${Math.max(0, race.length - race.playerProgress).toFixed(0)} m to go` });
   hud.update(dt, { vehicle: v, lightMode: player.flashing ? 2 : player.lightMode, timer: timerInfo,
     statusLines: [sky.preset.name.toUpperCase() + (weather.raining ? ' · RAIN' : ''), `CAM ${rig.mode.toUpperCase()}`,
-      race.wins + race.losses > 0 ? `RACES ${race.wins}W ${race.losses}L` : ''] });
+      race.wins + race.losses > 0 ? `RACES ${race.wins}W ${race.losses}L` : '',
+      `REP ${career.reputation.toLocaleString()} · $${career.money.toLocaleString()}`] });
+  if (frame % 20 === 0) updateNavigation();
+  showTheWay();
   if (frame % 6 === 0) mapView.drawMini(mapInfo());
 }
 
@@ -443,23 +497,27 @@ function nearestRival(v, rightX, rightZ) {
   return best;
 }
 
+// What the map screen draws besides the roads: the cars, the finish of a time attack or a race,
+// and a route - the shortest way to the race's gate, or else to the player's own destination.
 function mapInfo() {
-  const gate = challenge.state === 'running' ? map.pointAt(challenge.finishS, 0)
-    : rivals.race.state === 'racing' ? map.pointAt(rivals.race.finishS, 0) : null;
-  return { player: player.vehicle, others: [...traffic.cars, ...rivals.cars].filter((ai) => ai.active), challenge: gate };
+  const race = rivals.race, racing = race.state === 'racing';
+  const gate = challenge.state === 'running' ? map.pointAt(challenge.finishS, 0) : racing ? race.finish.way.pointAt(race.finish.s, 0) : null;
+  const route = racing ? race.route : nav.route;
+  return { player: player.vehicle, others: [...traffic.cars, ...rivals.cars].filter((ai) => ai.active), challenge: gate,
+    route: route ? net.routeLine(route) : null, routeColor: racing ? '#57ff9a' : '#59d7e6', goal: racing ? null : nav.goal };
 }
 
 // Banners and beeps for the rival race.
 function updateRaceHud() {
   const race = rivals.race;
   if (race.message && race.state === 'none') { hud.popup(race.message, 'info'); race.message = ''; }
-  if (race.state === 'invite') hud.setPrompt('F', `A level ${race.rival.skill.level} racer is flashing you — flash back to race`);
+  if (race.state === 'invite') hud.setPrompt('F', race.rival.style.ask);
   if (race.state === 'countdown') {
     const count = Math.ceil(race.timer);
-    if (count !== lastCountdown) { hud.banner(String(count), `RACE · ${race.rival.spec.name} · LEVEL ${race.rival.skill.level}`, 0.9, '#ffd166'); audio.beep(660, 0.15); lastCountdown = count; }
+    if (count !== lastCountdown) { hud.banner(String(count), `RACE · ${race.rival.spec.name} · ${race.rival.rating}`, 0.9, '#ffd166'); audio.beep(660, 0.15); lastCountdown = count; }
   }
   if (race.state !== lastRaceState) {
-    if (race.state === 'racing') { hud.banner('GO!', `${(race.length / 1000).toFixed(1)} km to the gate`, 1.6, '#57ff9a'); audio.beep(1320, 0.5); challenge.showGate(race.finishS); lastCountdown = 0; }
+    if (race.state === 'racing') { hud.banner('GO!', `${(race.length / 1000).toFixed(1)} km to the gate`, 1.6, '#57ff9a'); audio.beep(1320, 0.5); challenge.showGate(race.finish.s, race.finish.way); lastCountdown = 0; }
     if (race.state === 'done') { hud.banner(race.message, race.playerWon ? formatTime(race.timer) : 'flash another racer for a rematch', 4, race.playerWon ? '#57ff9a' : '#ff5148'); challenge.hideGate(); race.message = ''; }
     lastRaceState = race.state;
   }
@@ -481,16 +539,16 @@ function updateInteraction(v) {
   if (!input.wasPressed('interact')) return;
   if (found.type === 'fuel') { v.fuel = 1; hud.popup('TANK FULL', 'info'); audio.beep(520, 0.25); }
   else if (rivals.race.state === 'none') {
-    if (challenge.start(found.poi, player.s, playerDirection())) { hud.banner('TIME ATTACK', 'near misses take time off the clock', 2.5, '#ffd166'); audio.beep(880, 0.3); }
+    if (challenge.start(found.poi, mainRoadS(), playerDirection())) { hud.banner('TIME ATTACK', 'near misses take time off the clock', 2.5, '#ffd166'); audio.beep(880, 0.3); }
     else hud.popup('Not enough road that way — turn around', 'info');
   }
 }
 
 // Rain splashes are drawn on the piece of road around your car.
 function tellWeatherWhereTheRoadIs() {
-  const v = player.vehicle, i = Math.max(0, v.roadIndex);
-  const slope = (map.at(map.road.y, player.s + 3) - map.at(map.road.y, player.s - 3)) / 6;
-  weather.setGround(v.x, v.y, v.z, map.road.tx[i], map.road.tz[i], slope);
+  const v = player.vehicle, i = Math.max(0, v.roadIndex), way = player.way;
+  const slope = (way.at(way.road.y, player.s + 3) - way.at(way.road.y, player.s - 3)) / 6;
+  weather.setGround(v.x, v.y, v.z, way.road.tx[i], way.road.tz[i], slope);
 }
 
 // Moves the shared real lights and lists the cars whose light shines in your face (dazzlers).
@@ -680,7 +738,15 @@ function preview(id) {
   scene.add(previewCar.group);
   player.car.group.visible = false;
 }
+// The developer console (the ~ key): its window is ui/devConsole.js, its commands game/devCommands.js.
+const devConsole = createDevConsole();
+addDevCommands(devConsole, {
+  map, net, nav, weather, sky, hud, travelTo, teleport, playerInfo, setDestination,
+  player: () => player, rivals: () => rivals, driving: () => state === 'driving',
+  // Another car, there and then: on the road it keeps your place; its engine is the one you hear.
+  switchCar: (carId) => { spawnPlayer(carId); if (state === 'driving') audio.start(soundOf(player.spec)); },
+});
 // speedx.step(120) fast-forwards 120 frames at once (useful when the page is in the background and runs slowly).
 const step = (frames = 60) => { for (let i = 0; i < frames; i++) runFrame(1 / 60); };
-window.speedx = { preview, step, postfx, audio, save, garage, showroom, buildCar, finishSpec, setOrbit(angle, speed = 0) { menuAngle = angle; orbitSpeed = speed; }, get player() { return player; }, map, rig, sky, weather, traffic, get rivals() { return rivals; }, challenge, scene, renderer };  // handy in the browser console
+window.speedx = { preview, step, postfx, audio, save, career, devConsole, garage, showroom, buildCar, finishSpec, setOrbit(angle, speed = 0) { menuAngle = angle; orbitSpeed = speed; }, get player() { return player; }, map, net, nav, signals, rig, sky, weather, traffic, get rivals() { return rivals; }, challenge, scene, renderer };  // handy in the browser console
 tick();

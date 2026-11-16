@@ -28,6 +28,7 @@ Then open the address it prints (usually http://localhost:5173).
 | M | map — click a circle to travel there |
 | Backspace | put the car back on the road |
 | Esc | pause (rain and time of night are in this menu) |
+| ~ | developer console: type `help` (add reputation or money, go somewhere, change car...) |
 
 ## Where things live
 
@@ -39,7 +40,7 @@ src/config.js         every tweakable number: PHYSICS (grip/power/brake boosts),
                       damp road, mist, reflections), GAMEPLAY, KEYS
 src/core/             keyboard + mouse input, small math helpers
 src/world/            showroom (the bright room the garage shows your car in),
-                      mapData (road + heights), terrain, road, sea, town (ordinary buildings), signals (traffic lights),
+                      mapData (roads + heights + junctions), roadNet (finding the way round the roads), terrain, road, sea, town (ordinary buildings), signals (traffic lights),
                       sky (night stages, city lights),
                       weather (rain), and the shared library every map is built from:
                       library (the list, by name), plants, buildings, props (model files);
@@ -48,6 +49,7 @@ src/vehicles/         carSpecs (loads car folders, the engine library and the na
                       carSetup (factory car + what the owner changed = the one finished setup everything uses),
                       carStats (measures a car by driving it), carRating (ability bars and the 1-999 rating),
                       carLook (body parts: the car + what its owner chose to fit = the car to draw),
+                      randomBuild (a car as some street racer might have tuned and restyled it),
                       carResources (frees a car's 3D data when it is thrown away),
                       carShell (generated bodywork),
                       carEnds (lamps, grilles and trim laid on the nose and tail),
@@ -55,15 +57,18 @@ src/vehicles/         carSpecs (loads car folders, the engine library and the na
                       carWheel (generated wheels), carModel (prepares .glb models),
                       carBuilder (assembles a car: body, lamps, plates), interior (cockpit,
                       hands, wipers), vehiclePhysics (how the car drives), playerCar
-src/ai/               aiCar (shared base), traffic (picks each map's rule set), trafficTwoLane
-                      (the rules for a two-lane road), rivals (racers with skill levels 1-10)
-src/game/             collisions, challenge (near misses + time attack), save (the player's save file)
+src/ai/               aiCar (shared base), junctions (planning, giving way and turning at a junction),
+                      traffic (picks each map's rule set), trafficTwoLane (the rules for a two-lane road),
+                      rivals (street racers: their styles, and the race to a place)
+src/game/             collisions, challenge (near misses + time attack), save (the player's save file),
+                      career (reputation and money), devCommands (the developer console's commands)
 src/render/           cameras, materials (wet-road mirror, retroreflection, light beams),
                       smallLights (coloured glow from tail lamps and neon), reflections (what
-                      car paint mirrors), postfx (film camera look), streak (streak filter), filters (optional looks), sparks,
+                      car paint mirrors), navArrows (the way to go, drawn on the road), postfx (film camera look), streak (streak filter), filters (optional looks), sparks,
                       drawDistance (only draws the pieces of the world that are near)
 src/audio/            engine, wind, rain, pass-bys, crashes; revTest (revving an engine on the spot, to listen to it)
-src/ui/               HUD, map, menus, garage (change car, paint, engine, parts), statBars (rating and ability bars), CSS
+src/ui/               HUD, map, menus, garage (change car, paint, engine, parts), statBars (rating and ability bars),
+                      devConsole (the ~ window), CSS
 src/catalog/          the catalogue page (catalog.html): browse everything in the game
 
 public/content/cars/<id>/    one folder per car: car.json (+ model.glb)      ← add-ons go here
@@ -80,6 +85,7 @@ public/audio/                sound clips cut from reference/audio by tools/build
 tools/build-map.mjs      make a map folder from a real road (OpenStreetMap + elevation tiles)
 tools/osm-route.mjs      used by build-map for a LOOP or any drive through several roads (--via / --loop)
 tools/build-places.mjs   drafts a map's "buildings" list from the real places beside its road
+tools/build-test-map.mjs writes the made-up map "test-town": a small road network for trying out junctions
 tools/meshy-asset.sh     make a car or prop model with Meshy AI
 tools/build-audio.py     cut the sound clips
 tools/unpack-fmod-bank.py  take the recordings out of an FMOD .bank (Assetto Corsa sound mods)
@@ -148,8 +154,13 @@ Run `node tools/check-content.mjs` after any change.
 - **Rating scale.** With today's tables a factory 130 PS coupe rates about 370, a 250 PS sports car about
   570, a fully built one 700-850, and a 1000 PS four-wheel-drive hypercar about 865.
 - **Driven wheels.** `"drive"` in car.json: `rwd` (default), `fwd` or `awd` (`vehiclePhysics.js`).
-- **Car and driver are separate.** A rival's car has measured limits (cornering, braking, top speed, power);
-  the driver's skill level (1-10) is the share of those limits they use (`skillOf` in `src/ai/rivals.js`).
+- **Street racers.** None of them holds back: in a race every one uses the same large share of what their
+  car can do (`GAMEPLAY.racer` in `src/config.js`), a touch less on the straights while level or ahead, and a
+  rubber band when behind. What makes one harder than another is the car: each turns up in a different one,
+  tuned and restyled at random from the garage's own parts (`src/vehicles/randomBuild.js`) and rated within
+  reach of yours. What differs is their style when not racing (`STYLES` in `src/ai/rivals.js`): a *flyer*
+  drives flat out and races you if you keep up, a *hunter* catches you and flashes from your tail, a
+  *showoff* snakes about and taunts from in front. Flash your lights (F) to accept any of them.
 - **Names.** Players never see a real make or model. Every name comes from `public/content/names.json`
   (`brand` + `name`; `real` is a note for us). Change it there, reload, done. The brands are the made-up
   ones in `reference/speedx/brands/`. Traffic cars are not part of any of this: no engine, no rating.
@@ -189,11 +200,41 @@ Everything is generated by code at start-up — no model or texture downloads.
   is made of from the shared library, which stops it has (stops are the fast-travel points on every
   map), and which traffic rules its drivers follow (`"traffic": { "rules": "two-lane", ... }`).
   Rule sets are plug-ins: `src/ai/traffic.js` lists them, `trafficTwoLane.js` is the one for a
-  two-lane road. The road itself is still a single line - a map with junctions needs a road
-  network in `world/mapData.js` first. The line may be a **loop** (`"loop": true` in map.json):
+  two-lane road. The main road may be a **loop** (`"loop": true` in map.json):
   it joins back onto itself and has no end barriers. Code that compares two positions along the
   road must then use `map.wrap()`, `map.ahead()` and `map.roomAhead()` (explained at the top of
   `world/mapData.js`) instead of subtracting `s` values.
+- **More than one road.** A map may list further roads in `"roads"` (each `{ id, road: [[x, z]...], type,
+  sections }`). Every road is a **way**: an object shaped like a one-road map, so `way.pointAt`, `way.road`,
+  `way.laneCentre`... mean for that road what `map.pointAt`... mean for the main one (`map.ways[0]`); the top
+  of `world/mapData.js` explains it under WAYS. Roads join by being drawn to touch - an end lying on another
+  road (side road, fork, merge) or two lines crossing - and `joinWays()` there finds the junctions, matches
+  the heights, opens the guardrails and median wall and cuts the corners back. Roads listed first are "on
+  top" where two meet. `map.locate(x, z)` says which road a point is on; the player's car keeps its own
+  (`player.way`). `test-town` (`node tools/build-test-map.mjs`, open `/?map=test-town`) is a made-up area with
+  a ring, an avenue, a crossroads, a fork, a merge and a dead end. Stops, buildings and plants are still
+  placed along the main road only.
+- **Finding the way.** `src/world/roadNet.js` (`net` in main.js) answers what a driver or a race needs to
+  know about the network: the next junction ahead, the arms leaving it, where you end up after driving so
+  many metres (`net.walk`), and the shortest route between two places (`net.findRoute`). A place is
+  `{ way, s }`.
+- **AI at junctions.** Every AI car knows which road it is on (`ai.way`). `src/ai/junctions.js` plans the
+  next junction for it (which arm, how fast the turn can be taken), slows it down, makes it give way - the
+  road listed first at a junction has priority, one car turns at a time - and hands it to `startTurn()` in
+  `aiCar.js`, which carries it round a curve onto the new road. A brain never reads another car's position
+  directly: `lookAround()` (aiCar.js) tells it where the cars near it are along its OWN road, so a car
+  crossing at a junction is just "something in my lane ahead".
+- **A race is to a place.** Flash a racer and the gate is put about `GAMEPLAY.raceLength` further on, the
+  way the road leads (shorter on a small network). Any road will do: whoever has less road left by the
+  shortest route is ahead, the map draws that route, and the rival takes it (`src/ai/rivals.js`).
+- **Navigation.** On the map screen (M) click a road to set a destination (click it again to clear): the
+  shortest way there is drawn on the map and the minimap (`nav` in main.js; `goto` in the developer console),
+  as glowing chevrons on the road ahead (`src/render/navArrows.js`) and as the next instruction beside the
+  minimap - an arrow and how far (`hud.setNav`). A race shows its way to the gate the same way, in green.
+- **Traffic lights.** A light on its own goes in a road's `"signals"` (metres along it); `"signalJunctions"`
+  (a point at each junction) puts lights on every road meeting there, the main road and the joining roads
+  getting green in turn (`world/signals.js`, `lightJunction()` in `world/mapData.js`). AI drivers stop at
+  red (`signalSpeed` in `ai/aiCar.js`); racers in a race do not. The masts are solid.
 - **Kinds of road.** A road can change along the way: two lanes, four lanes with a median, a narrow
   country road (`ROAD_TYPES` in `src/config.js`). A map's `sections` say which stretch is which;
   `mapData.js` turns that into per-position widths (`road.half`, `road.barrier`, `road.lanes`...)
@@ -221,9 +262,6 @@ Everything is generated by code at start-up — no model or texture downloads.
 - **Only what is near is drawn.** Road ribbons are cut every kilometre, roadside things are grouped
   by area and the mountain is made of tiles with a fine and a rough version
   (`render/drawDistance.js`, distances in `GRAPHICS`). That is what lets a map be long.
-- **Rivals** have a skill level from 1 to 10 (`GAMEPLAY.rivalLevel` in `src/config.js`): better
-  ones corner faster, brake later, overtake into smaller gaps and swerve round traffic; in a race
-  one that falls behind gets a little extra pace (`ai/rivals.js`).
 - **Neon.** Buildings are lit with colour, not white light: `neon()` and `haze()` in
   `world/buildings.js`, and each stop's palette (`color`, `accent`, `light`) from its map.json entry.
 - **Nothing burns out.** Surfaces can have a brightness `limit` (`enhanceMaterial` in
@@ -238,6 +276,10 @@ Everything is generated by code at start-up — no model or texture downloads.
   The strengths are in `GRAPHICS` in `src/config.js` (`streak`, `glare`, `bloomStrength`,
   `buildingLights`, `dampRoad`…) — set one to 0 to see what it does.
 - **Rain** is in `world/weather.js` (streaks, splashes, tyre spray) and `postfx.js` (drops on the glass).
+
+Developer console: press `~` in the game and type `help`. The window is `src/ui/devConsole.js`; the commands
+(`rep`, `money`, `tp`, `goto`, `pos`, `car`, `fuel`, `rain`, `night`, `rival`, `race`, `save`) are one short entry
+each in `src/game/devCommands.js`. Reputation and money are kept by `src/game/career.js`, in the save file.
 
 Browser console helpers: `speedx.preview('<carId>')`, `speedx.setOrbit(angle, speed)`, `speedx.weather.toggle()`,
 `speedx.sky.setPreset(n)`, `speedx.step(120)` (fast-forward 120 frames — handy when the tab is in the background).

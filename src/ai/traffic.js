@@ -10,10 +10,10 @@
 // config.js -> GAMEPLAY.)
 //
 // To add a rule set: write  src/ai/traffic<Name>.js  exporting one function
-//     create(scene, map, settings)
+//     create(scene, map, settings, net)       net = the road network (world/roadNet.js)
 // that returns the same three things as trafficTwoLane.js:
 //     cars                                  the AI cars it made (aiCar.js: createAiCar)
-//     reset(playerS, everyone)              put them all somewhere new (after a fast travel)
+//     reset(playerInfo, everyone)           put them all somewhere new (after a fast travel)
 //     update(dt, playerInfo, everyone)      one frame: decide and move
 // then add one line to TRAFFIC_RULES below and describe it in
 // public/content/props/index.json ("builtIn" -> "traffic").
@@ -32,12 +32,12 @@ export function trafficSettings(map) {
   return { rules: 'two-lane', count: GAMEPLAY.trafficCount, speedLimit: GAMEPLAY.speedLimit, ...map.info.traffic };
 }
 
-export function createTraffic(scene, map) {
+export function createTraffic(scene, map, net) {
   const settings = trafficSettings(map);
   let create = TRAFFIC_RULES[settings.rules];
   if (!create) {
     console.warn(`This map asks for traffic rules "${settings.rules}", which do not exist (see src/ai/traffic.js). Using "two-lane".`);
     create = createTwoLaneTraffic;
   }
-  return create(scene, map, settings);
+  return create(scene, map, settings, net);
 }

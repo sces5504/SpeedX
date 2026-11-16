@@ -26,11 +26,12 @@ export function createChallenge(scene, map) {
   gate.add(bar);
   gate.visible = false;
   scene.add(gate);
-  function showGate(s) {
-    const p = map.pointAt(s, 0);
+  // Stand the gate across a road: s metres along `way` (the main road unless told otherwise).
+  function showGate(s, way = map) {
+    const p = way.pointAt(s, 0);
     gate.position.set(p.x, p.y, p.z);
     gate.rotation.y = p.yaw;
-    gate.scale.x = map.at(map.road.half, s) / ROAD.paveHalfWidth;      // as wide as the road is there
+    gate.scale.x = way.at(way.road.half, s) / ROAD.paveHalfWidth;      // as wide as the road is there
     gate.visible = true;
   }
 

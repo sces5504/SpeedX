@@ -14,7 +14,6 @@ import { shared, makeHeadlightCookie } from '../render/materials.js';
 import { releaseResources } from './carResources.js';
 
 const cookie = makeHeadlightCookie();
-const proj = {};
 
 // spec = the finished setup of the car to drive (carSetup.js).
 export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
@@ -27,7 +26,7 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
 
   const vehicle = createVehicle(spec);
   // Extra fields so collisions.js can treat the vehicle as a "body".
-  Object.assign(vehicle, { mass: spec.mass, halfWidth: car.dims.halfW, front: -car.dims.frontZ, rear: car.dims.rearZ, roadIndex: -1 });
+  Object.assign(vehicle, { mass: spec.mass, halfWidth: car.dims.halfW, front: -car.dims.frontZ, rear: car.dims.rearZ, roadIndex: -1, way: map.ways[0] });
 
   // ---- Real headlight beams -------------------------------------------------------
   const beams = [-1, 1].map((side) => {
@@ -55,10 +54,13 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
     bodyRoll: 0, bodyRollSpeed: 0, bodyPitch: 0, bodyPitchSpeed: 0, bounce: 0, bounceSpeed: 0,
     s: 0, d: 0, pitch: 0, roll: 0, calmLat: 0, calmLong: 0,
 
-    // Put the car on the road: s metres along, d metres right of centre, facing +1 (up) or -1 (down).
-    placeAt(s, d = ROAD.laneWidth / 2, direction = 1) {
-      const p = map.pointAt(s, d * direction);
-      Object.assign(vehicle, { x: p.x, z: p.z, yaw: p.yaw + (direction < 0 ? Math.PI : 0), vx: 0, vz: 0, yawRate: 0, gear: 1, roadIndex: -1 });
+    way: map.ways[0],        // the road the car is on (world/mapData.js: WAYS); s and d are measured along it
+
+    // Put the car on a road: s metres along, d metres right of centre, facing +1 (up) or -1 (down).
+    // way = which road (the main one unless told otherwise).
+    placeAt(s, d = ROAD.laneWidth / 2, direction = 1, way = map.ways[0]) {
+      const p = way.pointAt(s, d * direction);
+      Object.assign(vehicle, { x: p.x, z: p.z, yaw: p.yaw + (direction < 0 ? Math.PI : 0), vx: 0, vz: 0, yawRate: 0, gear: 1, roadIndex: -1, way });
       vehicle.rpm = spec.engine.idle;
     },
 
@@ -78,19 +80,21 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
 
   // What is under the car right now? (grip and slope, in the car's own directions)
   function readGround(weatherGrip) {
-    const { road } = map;
-    map.project(vehicle.x, vehicle.z, vehicle.roadIndex, proj);
+    // Which road is under the car, and where on it? (The car remembers: that keeps the search quick.)
+    const proj = map.locate(vehicle.x, vehicle.z, vehicle.way, vehicle.roadIndex);
+    const way = proj.way, { road } = way;
+    vehicle.way = player.way = way;
     vehicle.roadIndex = proj.index;
     player.s = proj.s; player.d = proj.d;
     const i = Math.min(proj.index, road.count - 2);
     // Slopes are blended between road samples, otherwise the car would twitch every 2 metres.
-    const grade = (map.at(road.y, proj.s + 1.5) - map.at(road.y, proj.s - 1.5)) / 3;   // rise per metre along the road
-    const half = map.at(road.half, proj.s);                          // centre line to the edge of the asphalt, here
-    const bank = Math.abs(proj.d) < half ? map.at(road.bank, proj.s) : 0;
+    const grade = (way.at(road.y, proj.s + 1.5) - way.at(road.y, proj.s - 1.5)) / 3;   // rise per metre along the road
+    const half = way.at(road.half, proj.s);                          // centre line to the edge of the asphalt, here
+    const bank = Math.abs(proj.d) < half ? way.at(road.bank, proj.s) : 0;
     const fx = -Math.sin(vehicle.yaw), fz = -Math.cos(vehicle.yaw);
     const along = fx * road.tx[i] + fz * road.tz[i];                // 1 = driving up the road, -1 = down
     const across = -fx * road.tz[i] + fz * road.tx[i];
-    const lot = (proj.d > 0 ? road.railR[i] : road.railL[i]) === 2; // parking lots are paved
+    const lot = (proj.d > 0 ? road.railR[i] : road.railL[i]) >= 2;  // parking lots and junction mouths are paved
     player.onGravel = Math.abs(proj.d) > half && !lot;
     return {
       grip: weatherGrip * (player.onGravel ? PHYSICS.gravelGrip : 1),
@@ -103,7 +107,7 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
   function updateVisuals(dt) {
     const v = vehicle, g = car.group;
     const ground = readGround(1);
-    v.y = map.roadHeight(player.s, player.d);
+    v.y = player.way.roadHeight(player.s, player.d);
     g.position.set(v.x, v.y, v.z);
     player.pitch = damp(player.pitch, Math.atan(ground.slopeForward), 4, dt);
     player.roll = damp(player.roll, Math.atan(ground.slopeRight), 4, dt);

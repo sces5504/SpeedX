@@ -105,9 +105,18 @@ export const GAMEPLAY = {
   freeParts: true,         // TEST GARAGE: every car and every part that fits can be had for nothing.
                            // false = the garage asks the shop rules (prices, what is unlocked) once those exist
   trafficCount: 5,         // ordinary cars alive around the player
-  rivalCount: 2,           // illegal racers cruising the road
-  rivalLevel: 6,           // how good they are, 1 (Sunday driver) .. 10 (touge legend) - see ai/rivals.js
-  rivalLevelSpread: 2,     // each rival that turns up is this many levels better or worse, at random
+  rivalCount: 3,           // illegal racers cruising the road
+  // How every street racer drives in a race (ai/rivals.js). None of them holds back: these are the
+  // shares of what THEIR CAR can do (carRating.js: limits), and what makes one faster than another
+  // is the car, which each of them has tuned differently (vehicles/randomBuild.js).
+  racer: {
+    cornering: 0.9,        // share of the car's cornering grip they use
+    braking: 0.86,         // share of its braking they plan with: higher = brakes later
+    straight: 0.94,        // share of its power and top speed on the straights while they are not behind you
+    catchUp: 0.2,          // rubber band: this much extra pace when they have fallen 160 m behind
+    easeOff: 0.08,         // ...and this much less when they are 90 m ahead
+    ratingSpread: 90,      // their cars are rated within about this many points of yours
+  },
   spawnDistance: 420,      // traffic appears this far away (out of headlight range)
   despawnDistance: 650,
   speedLimit: 22,          // 22 m/s ≈ 50 mph, what normal traffic drives
@@ -153,6 +162,7 @@ export const KEYS = {
   pause: ['Escape'],
   interact: ['KeyE'],
   reset: ['Backspace'],    // put the car back on the road
+  console: ['Backquote'],  // ~ : the developer console (ui/devConsole.js)
 };
 
 export const MPH = 2.23694; // metres per second -> miles per hour

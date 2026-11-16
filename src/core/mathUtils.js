@@ -23,6 +23,13 @@ export const angleDiff = (a, b) => {
   return d;
 };
 
+// A point on the smooth curve drawn by four [x, z] points (a Bezier curve): it starts at the first,
+// ends at the last, and the two in between pull it into shape. t = 0 at its start to 1 at its end.
+export function curvePoint([a, b, c, d], t) {
+  const u = 1 - t, w0 = u * u * u, w1 = 3 * u * u * t, w2 = 3 * u * t * t, w3 = t * t * t;
+  return [a[0] * w0 + b[0] * w1 + c[0] * w2 + d[0] * w3, a[1] * w0 + b[1] * w1 + c[1] * w2 + d[1] * w3];
+}
+
 // Repeatable random numbers: the same seed always gives the same world.
 export function makeRandom(seed = 1) {
   let s = seed >>> 0;

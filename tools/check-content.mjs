@@ -2,6 +2,7 @@
 //   node tools/check-content.mjs
 // Prints one line per problem and exits with an error if there are any.
 import fs from 'node:fs';
+import { ROAD_TYPES } from '../src/config.js';
 
 const problems = [];
 const bad = (where, message) => problems.push(`${where}: ${message}`);
@@ -133,6 +134,15 @@ for (const id of mapIndex?.maps || []) {
   for (let i = 1; i < map.road.length; i++) length += Math.hypot(map.road[i][0] - map.road[i - 1][0], map.road[i][1] - map.road[i - 1][1]);
   if (map.loop) length += Math.hypot(map.road[0][0] - map.road[map.road.length - 1][0], map.road[0][1] - map.road[map.road.length - 1][1]);   // back to the start
   if (length < 1500) bad(id, `road is only ${Math.round(length)} m long (need 1500 m or more)`);
+  // More roads ("roads"): each needs an id of its own and a line; an end that is meant to join another
+  // road must lie on that road's centre line (src/world/mapData.js: WAYS).
+  const roadIds = new Set(['main']);
+  for (const extra of map.roads || []) {
+    if (!extra.id || roadIds.has(extra.id)) bad(id, `every entry of "roads" needs an "id" of its own (found "${extra.id}")`);
+    roadIds.add(extra.id);
+    if (!Array.isArray(extra.road) || extra.road.length < 2) bad(id, `road "${extra.id}" needs a "road": [[x, z], ...] with at least 2 points`);
+    if (extra.type && !ROAD_TYPES[extra.type]) bad(id, `road "${extra.id}": type must be one of ${Object.keys(ROAD_TYPES).join(', ')}`);
+  }
   const ids = new Set();
   for (const poi of map.pois || []) {
     if (ids.has(poi.id)) bad(id, `two pois share the id "${poi.id}"`); ids.add(poi.id);
@@ -152,6 +162,7 @@ for (const id of mapIndex?.maps || []) {
     if (!builtIn.buildings?.[building.kind]) bad(id, `building kind "${building.kind}" is not in props/index.json`);
     if (!Array.isArray(building.at) && !isNumber(building.s)) bad(id, `a "${building.kind}" building needs "at": [x, z] or "s" (metres along the road)`);
   }
+  for (const point of map.signalJunctions || []) if (!Array.isArray(point) || point.length !== 2) bad(id, '"signalJunctions" is a list of [x, z] points, one at each junction with traffic lights');
   if (map.ground && !builtIn.grounds?.[map.ground]) bad(id, `ground "${map.ground}" is not in props/index.json`);
   if (map.traffic?.rules && !builtIn.traffic?.[map.traffic.rules]) bad(id, `traffic rules "${map.traffic.rules}" are not in props/index.json`);
   console.log(`map ${id}: ${(length / 1000).toFixed(1)} km${map.loop ? ' loop' : ''}, ${(map.pois || []).length} pois`);

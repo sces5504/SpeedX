@@ -133,9 +133,11 @@ export function buildPois(map) {
   // ---- Road closed barriers at both ends --------------------------------------
   const stripes = makeStripeTexture('#f2f2f2', '#e2571a');
   const stripeMat = enhanceMaterial(new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.5 }), { retro: 3 });
-  for (const s of map.road.closed ? [] : [5, map.road.length - 5]) {            // (a loop has no ends to close)
+  // (a loop has no ends to close, and neither has an end that joins another road)
+  const deadEnds = map.ways.flatMap((way) => (way.road.closed ? [] : [way.road.joinedStart ? null : [way, 5], way.road.joinedEnd ? null : [way, way.road.length - 5]])).filter(Boolean);
+  for (const [way, s] of deadEnds) {
     for (const d of [-4, 0, 4]) {
-      const p = map.pointAt(s, d);
+      const p = way.pointAt(s, d);
       const barrier = new THREE.Group();
       for (const y of [0.55, 1.0, 1.45]) barrier.add(box(3.0, 0.24, 0.05, stripeMat, 0, y, 0));
       barrier.add(box(0.08, 1.6, 0.5, darkMetal, -1.3, 0.8, 0), box(0.08, 1.6, 0.5, darkMetal, 1.3, 0.8, 0));

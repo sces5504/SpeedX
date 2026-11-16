@@ -55,34 +55,45 @@ function pointVelocity(body, px, pz) {
  * { speed: how hard (m/s into the wall), scrape: sliding speed along it,
  *   side: -1 left / +1 right of the car, x, z }
  */
+// How far a corner of the car at `spot` (a place on one way: { way, index, s, d, past }) is
+// through that way's barriers, and which way to push it back: { depth, nx, nz } (depth 0 = fine).
+// null = this way has no say there (the point lies beyond an end that joins another road).
+function edgeOf(spot, body) {
+  const { way } = spot, { road } = way, i = spot.index;
+  if (spot.past > 0 && (spot.s < 1 ? road.joinedStart : road.joinedEnd)) return null;
+  let depth = 0, nx = 0, nz = 0;
+  const limit = spot.d > 0 ? way.at(road.limitR, spot.s) : way.at(road.limitL, spot.s);
+  if (Math.abs(spot.d) > limit) {                         // through the side barrier
+    depth = Math.abs(spot.d) - limit;
+    const sign = spot.d > 0 ? -1 : 1;                     // push back toward the centre line
+    nx = -road.tz[i] * sign; nz = road.tx[i] * sign;
+  }
+  // The concrete wall down the middle of a divided road: a corner inside it is pushed back out to the
+  // side the car's middle is on.
+  if (road.wall[i] === 1 && Math.abs(spot.d) < 0.42 && 0.42 - Math.abs(spot.d) > depth) {
+    way.project(body.x, body.z, i, middle);
+    const side = middle.d >= 0 ? 1 : -1;
+    depth = 0.42 - Math.abs(spot.d) * (Math.sign(spot.d) === side ? 1 : -1); nx = -road.tz[i] * side; nz = road.tx[i] * side;
+  }
+  const endMargin = 9;                                    // "road closed" barriers at the ends of a road that just stops
+  if (!road.closed && !road.joinedStart && spot.s < endMargin && endMargin - spot.s > depth) { depth = endMargin - spot.s; nx = road.tx[i]; nz = road.tz[i]; }
+  if (!road.closed && !road.joinedEnd && spot.s > road.length - endMargin && spot.s - (road.length - endMargin) > depth) {
+    depth = spot.s - (road.length - endMargin); nx = -road.tx[i]; nz = -road.tz[i];
+  }
+  return { depth, nx, nz };
+}
+
 export function collideWithRoadEdges(body, map) {
-  const { road } = map;
   let hit = null;
-  let hint = body.roadIndex ?? -1;
   for (const c of corners(body)) {
-    map.project(c.x, c.z, hint, proj);
-    hint = proj.index;
-    const i = proj.index;
-    let depth = 0, nx = 0, nz = 0;
-    const limit = proj.d > 0 ? map.at(road.limitR, proj.s) : map.at(road.limitL, proj.s);
-    if (Math.abs(proj.d) > limit) {                         // through the side barrier
-      depth = Math.abs(proj.d) - limit;
-      const sign = proj.d > 0 ? -1 : 1;                     // push back toward the centre line
-      nx = -road.tz[i] * sign; nz = road.tx[i] * sign;
+    // Where roads meet, each one's barrier stops at the other's ground: a corner is only in
+    // trouble if EVERY road near it says so, and then the road that minds least decides.
+    let least = null;
+    for (const spot of map.spotsAt(c.x, c.z, body.way, body.roadIndex ?? -1)) {
+      const edge = edgeOf(spot, body);
+      if (edge && (!least || edge.depth < least.depth)) least = edge;
     }
-    // The concrete wall down the middle of a divided road: a corner inside it is pushed back out to the
-    // side the car's middle is on.
-    if (road.wall[i] === 1 && Math.abs(proj.d) < 0.42 && 0.42 - Math.abs(proj.d) > depth) {
-      map.project(body.x, body.z, hint, middle);
-      const side = middle.d >= 0 ? 1 : -1;
-      depth = 0.42 - Math.abs(proj.d) * (Math.sign(proj.d) === side ? 1 : -1); nx = -road.tz[i] * side; nz = road.tx[i] * side;
-    }
-    const endMargin = 9;                                    // "road closed" barriers at both ends (a loop has none)
-    if (!road.closed && proj.s < endMargin && endMargin - proj.s > depth) { depth = endMargin - proj.s; nx = road.tx[i]; nz = road.tz[i]; }
-    if (!road.closed && proj.s > road.length - endMargin && proj.s - (road.length - endMargin) > depth) {
-      depth = proj.s - (road.length - endMargin); nx = -road.tx[i]; nz = -road.tz[i];
-    }
-    if (depth > (hit ? hit.depth : 0)) hit = { depth, nx, nz, x: c.x, z: c.z };
+    if (least && least.depth > (hit ? hit.depth : 0)) hit = { ...least, x: c.x, z: c.z };
   }
   if (!hit) return null;
 

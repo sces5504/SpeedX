@@ -33,17 +33,33 @@ export function roadPaint(color, extra = {}) {
   return material;
 }
 
+// Every road of the map (world/mapData.js: WAYS), one after the other.
 export function buildRoad(map) {
-  const { road } = map;
   const group = new THREE.Group();
   group.name = 'road';
-  const asphaltTex = makeAsphaltTexture();
-  const normalTex = makeNoiseNormalMap();
+  const textures = { asphalt: makeAsphaltTexture(), normal: makeNoiseNormalMap() };
+  for (const way of map.ways) group.add(buildWay(way, textures));
+  return group;
+}
+
+// One road. `map` here is that road's WAY, which answers the same questions the map answers
+// about its main road (map.pointAt, map.road...), so everything below reads as it always did.
+function buildWay(map, textures) {
+  const { road } = map;
+  const group = new THREE.Group();
+  const asphaltTex = textures.asphalt, normalTex = textures.normal;
+  // Where two roads share the ground at a junction, the one listed first in map.json is drawn on
+  // top: every later road's ground is pushed a hair further "back" for the graphics card, so the
+  // two never flicker through each other. (Nothing moves: it only settles which one you see.)
+  const ground = (material) => {
+    if (map.number > 0) { material.polygonOffset = true; material.polygonOffsetFactor = map.number; material.polygonOffsetUnits = map.number * 4; }
+    return material;
+  };
 
   // ---- Asphalt ------------------------------------------------------------
-  const asphalt = enhanceMaterial(new THREE.MeshStandardMaterial({
+  const asphalt = ground(enhanceMaterial(new THREE.MeshStandardMaterial({
     map: asphaltTex, normalMap: normalTex, normalScale: new THREE.Vector2(0.15, 0.15), roughness: 0.9,
-  }), { wet: true, limit: ROAD_GLARE });
+  }), { wet: true, limit: ROAD_GLARE }));
   // Every roadside position is measured from two per-sample numbers (mapData.js): road.half = centre line
   // to the edge of the asphalt, road.barrier = centre line to the guardrail. Both change where the road
   // changes kind (two lanes, four lanes with a median, a narrow country road).
@@ -52,14 +68,21 @@ export function buildRoad(map) {
   // ---- Painted lines (slightly above the asphalt) --------------------------
   const yellow = roadPaint(0xc8961a), white = roadPaint(0xd8d8d2);
   // One painted line on each side of the centre: where(i) = metres from the centre line at
-  // sample i, or null for "no paint here" (the gaps of a broken line).
-  const lines = (material, where, width) => {
+  // sample i, or null for "no paint here" (the gaps of a broken line). A road has no paint of
+  // its own where it runs across another road's ground (road.under). edge = a line along the
+  // edge of the road: it stops on the side where another road joins (the mouth of a junction).
+  const lines = (material, where, width, edge = false) => {
     const stripe = (d) => [{ d: d - width / 2, y: 0.012 }, { d: d + width / 2, y: 0.012, cut: true }];
-    group.add(buildStrip(map, material, (i) => { const d = where(i); return d === null ? null : [...stripe(-d), ...stripe(d)]; }));
+    group.add(buildStrip(map, material, (i) => {
+      const d = road.under[i] ? null : where(i);
+      if (d === null) return null;
+      const left = edge && road.railL[i] === 3 ? [] : stripe(-d), right = edge && road.railR[i] === 3 ? [] : stripe(d);
+      return left.length + right.length ? [...left, ...right] : null;
+    }));
   };
   lines(yellow, (i) => (road.centreLine[i] && road.wall[i] !== 2 ? Math.max(0.14, road.median[i] - 0.15) : null), 0.11);   // double yellow: together, or one each side of a median (none on a narrow road)
-  lines(roadPaint(0xb02a1e), (i) => (road.lanes[i] > 1 ? road.half[i] - 0.14 : null), 0.12);              // the red no-parking line along the edge of a main road
-  lines(white, (i) => road.median[i] + road.lanes[i] * road.laneWidth[i], 0.12);    // white edge lines
+  lines(roadPaint(0xb02a1e), (i) => (road.lanes[i] > 1 ? road.half[i] - 0.14 : null), 0.12, true);        // the red no-parking line along the edge of a main road
+  lines(white, (i) => road.median[i] + road.lanes[i] * road.laneWidth[i], 0.12, true);    // white edge lines
   // A wide median between the two double lines is filled with slanted yellow bars (no driving here).
   const hatch = roadPaint(0xc8961a);
   hatch.map = canvasTexture(64, 64, (g, w, h) => {
@@ -67,14 +90,14 @@ export function buildRoad(map) {
     for (let x = -h; x < w * 2; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.stroke(); }
   });
   hatch.map.repeat.set(3, 2); hatch.alphaTest = 0.5;
-  group.add(buildStrip(map, hatch, (i) => (road.median[i] > 0.5 && !road.wall[i] ? [{ d: -road.median[i] + 0.22, y: 0.012 }, { d: road.median[i] - 0.22, y: 0.012 }] : null)));
+  group.add(buildStrip(map, hatch, (i) => (road.median[i] > 0.5 && !road.wall[i] && !road.under[i] ? [{ d: -road.median[i] + 0.22, y: 0.012 }, { d: road.median[i] - 0.22, y: 0.012 }] : null)));
   // Broken white line between two lanes going the same way: 4 m of paint, 6 m of gap.
   lines(white, (i) => (road.lanes[i] > 1 && i % 5 < 3 ? road.median[i] + road.laneWidth[i] : null), 0.1);
 
   // ---- Shoulders: gravel, dirt berm on the hill side, parking lots ----------
-  const shoulderMat = enhanceMaterial(new THREE.MeshStandardMaterial({
+  const shoulderMat = ground(enhanceMaterial(new THREE.MeshStandardMaterial({
     map: asphaltTex, normalMap: normalTex, vertexColors: true, roughness: 0.95,
-  }), { wet: true, limit: ROAD_GLARE });
+  }), { wet: true, limit: ROAD_GLARE }));
   const GRAVEL = [1.5, 1.3, 1.05], LOT = [0.8, 0.8, 0.82], DIRT = [1.0, 0.85, 0.6];
   // The cross-section of one shoulder at sample i, from the asphalt outward (side: +1 right, -1 left).
   const shoulder = (i, side) => {
@@ -83,6 +106,7 @@ export function buildRoad(map) {
     const b = bench[i], outer = b + 2, half = road.half[i], B = road.barrier[i];
     const edge = map.terrainHeight(road.x[i] - road.tz[i] * outer * side, road.z[i] + road.tx[i] * outer * side) - 0.3;
     let pts;
+    if (rail[i] === 3) return [];  // the mouth of a road that joins here: that road paves it
     if (rail[i] === 2) {          // open lot (gas station, turnout, turnaround)
       pts = [{ d: half, c: LOT }, { d: B - 0.1, c: LOT }, { d: B + 0.1, c: LOT }, { d: b - 3, c: LOT }, { d: b - 1.5, y: -0.05, c: GRAVEL }, { d: outer, abs: edge, c: DIRT }];
     } else if (rail[i] === 1) {   // guardrail side
@@ -96,7 +120,7 @@ export function buildRoad(map) {
   // Both shoulders share one ribbon (fewer things to draw): left one, a cut, then the right one.
   group.add(buildStrip(map, shoulderMat, (i) => {
     const left = shoulder(i, -1);
-    left[left.length - 1] = { ...left[left.length - 1], cut: true };
+    if (left.length) left[left.length - 1] = { ...left[left.length - 1], cut: true };
     return [...left, ...shoulder(i, 1)];
   }));
 
@@ -175,7 +199,7 @@ export function buildRoad(map) {
   group.add(instancesByArea(tab, reflector(0xffb820), reflectorYellow));
   // Raised yellow markers between the centre lines, every 14 m
   const studs = [];
-  for (let s = 6; s < road.length; s += 14) { map.pointAt(s, 0, p); studs.push({ x: p.x, y: p.y + 0.012, z: p.z, yaw: p.yaw }); }
+  for (let s = 6; s < road.length; s += 14) { if (road.under[map.indexAt(s)]) continue; map.pointAt(s, 0, p); studs.push({ x: p.x, y: p.y + 0.012, z: p.z, yaw: p.yaw }); }
   group.add(instancesByArea(new THREE.BoxGeometry(0.16, 0.03, 0.16), reflector(0xffb820), studs));
   // White marker posts with a reflective band
   const postWhite = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0xe8e8e2, roughness: 0.6 }), { retro: 1.2 });
@@ -190,7 +214,7 @@ export function buildRoad(map) {
     const curve = road.curve[i];
     if (Math.abs(curve) < 1 / 120) continue;
     const side = curve > 0 ? 1 : -1;                         // outside of the bend
-    if ((side > 0 ? road.railR : road.railL)[i] === 2) continue;
+    if ((side > 0 ? road.railR : road.railL)[i] >= 2) continue;
     map.pointAt(i * ROAD.step, (road.barrier[i] + 1.3) * side, p);
     const t = { x: p.x, y: p.y + 1.45, z: p.z, yaw: p.yaw };  // front faces drivers coming along +s
     (curve > 0 ? chevronLeft : chevronRight).push(t);

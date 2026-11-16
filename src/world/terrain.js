@@ -23,7 +23,7 @@ const DETAIL_RANGE = 480;   // metres from the road that get full detail
 const TILE_BLOCKS = 32;     // a tile is this many blocks across (32 x 40 m = 1280 m)
 
 export function buildTerrain(map) {
-  const { heightmap: hm, carved, road } = map;
+  const { heightmap: hm, carved } = map;
   const ground = GROUNDS[map.info.ground] || GROUNDS.chaparral;
   const gentle = new THREE.Color(...ground.gentle), steepRock = new THREE.Color(...ground.steep);
   const shore = ground.shore && map.seaLevel !== null ? new THREE.Color(...ground.shore) : null;
@@ -32,7 +32,7 @@ export function buildTerrain(map) {
   // Mark the blocks that are close to the road.
   const detailed = new Uint8Array(blockCols * blockRows);
   const reach = Math.ceil(DETAIL_RANGE / (hm.cell * BLOCK));
-  for (let i = 0; i < road.count; i += 8) {
+  for (const { road } of map.ways || [map]) for (let i = 0; i < road.count; i += 8) {        // (every road of the map)
     const bc = Math.floor((road.x[i] - hm.x0) / (hm.cell * BLOCK));
     const br = Math.floor((road.z[i] - hm.z0) / (hm.cell * BLOCK));
     for (let r = Math.max(0, br - reach); r <= Math.min(blockRows - 1, br + reach); r++) {

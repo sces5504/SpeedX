@@ -1,7 +1,8 @@
 {
   "maps": [
     "angeles-crest",
-    "shimen-coast"
+    "shimen-coast",
+    "test-town"
   ],
   "default": "angeles-crest"
 }

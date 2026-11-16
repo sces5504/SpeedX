@@ -14,16 +14,24 @@
 //   * PANIC: if you come at them head-on in their lane they brake and honk
 // Cars far from the player are recycled: removed and re-placed ahead or behind,
 // out of sight, so the road always has traffic without simulating all of it.
+// Where the map has junctions they take them (ai/junctions.js): each driver picks an arm,
+// indicates, slows for the turn, and gives way to the main road.
 //
 // traffic.js picks this file for maps that ask for "two-lane" (the default).
 // ---------------------------------------------------------------------------
 import { GAMEPLAY } from '../config.js';
 import { clamp } from '../core/mathUtils.js';
 import { TRAFFIC_CARS } from '../vehicles/carSpecs.js';
-import { createAiCar, placeAi, removeAi, moveAi, safeSpeed, findAhead, signalSpeed } from './aiCar.js';
+import { createAiCar, placeAi, removeAi, moveAi, safeSpeed, findAhead, signalSpeed, lookAround, nearDeadEnd } from './aiCar.js';
+import { approachJunction, wander } from './junctions.js';
 
-/** @param settings { count, speedLimit } — from the map, see traffic.js */
-export function createTwoLaneTraffic(scene, map, settings) {
+const HOW_THEY_TURN = { turnGrip: 2.6, braking: 2.5, yields: true };        // ordinary drivers at a junction (ai/junctions.js)
+
+/**
+ * @param settings { count, speedLimit } — from the map, see traffic.js
+ * @param net      the road network (world/roadNet.js)
+ */
+export function createTwoLaneTraffic(scene, map, settings, net) {
   const ids = Object.keys(TRAFFIC_CARS);
   const cars = [];
   for (let k = 0; k < settings.count; k++) {
@@ -35,22 +43,26 @@ export function createTwoLaneTraffic(scene, map, settings) {
     ai.honk = false;        // set true for one frame when this driver honks
     cars.push(ai);
   }
+  const anyArm = (exits) => exits[Math.floor(Math.random() * exits.length)];
 
-  // Put a car somewhere sensible relative to the player.
-  function spawn(ai, playerS, everyone, anywhere) {
+  // Put a car somewhere sensible relative to the player: so many metres away BY ROAD, whichever
+  // roads that leads along (on a map with one road: simply up or down it).
+  function spawn(ai, playerInfo, everyone, anywhere) {
     for (let attempt = 0; attempt < 12; attempt++) {
-      const offset = anywhere
-        ? (Math.random() * 2 - 1) * GAMEPLAY.despawnDistance * 0.9
-        : (Math.random() < 0.65 ? 1 : -1) * (GAMEPLAY.spawnDistance + Math.random() * 160);
-      const s = map.wrap(playerS + offset);
-      if (map.nearEnd(s, 60) || Math.abs(offset) < 90) continue;
+      const metres = anywhere ? 90 + Math.random() * (GAMEPLAY.despawnDistance * 0.9 - 90) : GAMEPLAY.spawnDistance + Math.random() * 160;
+      const toward = anywhere ? (Math.random() < 0.5 ? 1 : -1) : (Math.random() < 0.65 ? 1 : -1);
+      const place = net.walk(playerInfo.way, playerInfo.s, toward, metres, anyArm), way = place.way;
+      if (place.travelled < metres - 1 || way.nearEnd(place.s, 60)) continue;                      // the road ran out
+      if (way.junctions.some((at) => Math.abs(way.ahead(at.s, place.s)) < 70)) continue;          // not at a junction: no room to slow for it
+      const spot = way.pointAt(place.s, 0);
+      if (!anywhere && Math.hypot(spot.x - playerInfo.x, spot.z - playerInfo.z) < 200) continue;  // the roads led back close to the player: it would pop into view
       const dir = Math.random() < 0.5 ? 1 : -1;
       // Not on top of another car in the same lane.
-      if (everyone.some((o) => o.active && o !== ai && o.dir === dir && Math.abs(map.ahead(o.s, s)) < 45)) continue;
+      if (everyone.some((o) => o.active && o !== ai && o.way === way && o.dir === dir && Math.abs(way.ahead(o.s, place.s)) < 45)) continue;
       ai.pace = (0.82 + Math.random() * 0.3) * (ai.spec.mass > 2000 ? 0.85 : 1);     // this driver's speed, as a share of the limit
-      ai.cruise = map.at(map.road.limit, s) * ai.pace;
+      ai.cruise = way.at(way.road.limit, place.s) * ai.pace;
       ai.lane = 1; ai.laneWait = 0;                 // starts in the right-hand lane (where there are two)
-      placeAi(ai, map, s, dir, ai.cruise * 0.9, ai.spec.colors[Math.floor(Math.random() * ai.spec.colors.length)]);
+      placeAi(ai, way, place.s, dir, ai.cruise * 0.9, ai.spec.colors[Math.floor(Math.random() * ai.spec.colors.length)]);
       ai.tailgated = 0; ai.yielding = 0;
       return true;
     }
@@ -59,49 +71,51 @@ export function createTwoLaneTraffic(scene, map, settings) {
 
   return {
     cars,
-    reset(playerS, everyone) { for (const ai of cars) { removeAi(ai); spawn(ai, playerS, everyone, true); } },
+    reset(playerInfo, everyone) { for (const ai of cars) { removeAi(ai); spawn(ai, playerInfo, everyone, true); } },
 
     /**
      * @param everyone   all cars on the road, including the player's shadow
-     * @param playerInfo { s, d, dir, speed, flashing, honking } — what the player is doing
+     * @param playerInfo { way, s, d, dir, speed, x, z, flashing, honking } — what the player is doing
      */
     update(dt, playerInfo, everyone) {
       for (const ai of cars) {
         ai.honk = false;
-        if (!ai.active) { spawn(ai, playerInfo.s, everyone, false); continue; }
-        const fromPlayer = map.ahead(playerInfo.s, ai.s);
-        if (Math.abs(fromPlayer) > GAMEPLAY.despawnDistance || map.nearEnd(ai.s, 40)) { removeAi(ai); continue; }
+        if (!ai.active) { spawn(ai, playerInfo, everyone, false); continue; }
+        // How far from the player: by road when they share one, otherwise as the crow flies (and a bit, for the bends).
+        const away = ai.way === playerInfo.way ? Math.abs(ai.way.ahead(playerInfo.s, ai.s)) : Math.hypot(ai.x - playerInfo.x, ai.z - playerInfo.z) * 1.3;
+        if (away > GAMEPLAY.despawnDistance || nearDeadEnd(ai, 40)) { removeAi(ai); continue; }
         think(ai, dt, playerInfo, everyone);
-        moveAi(ai, dt, map);
+        moveAi(ai, dt);
       }
     },
   };
 
   function think(ai, dt, playerInfo, everyone) {
-    // 1. Speed for the road itself.
-    ai.cruise = map.at(map.road.limit, ai.s) * (ai.pace || 1);       // the limit of this stretch of road
-    let want = Math.min(ai.cruise, safeSpeed(map, ai, 70, 2.8, 2.5), signalSpeed(map, ai, 3.2));
+    const way = ai.way, seen = lookAround(ai, everyone);
+    // 1. Speed for the road itself, and for the junction coming up.
+    ai.cruise = way.at(way.road.limit, ai.s) * (ai.pace || 1);       // the limit of this stretch of road
+    let want = Math.min(ai.cruise, safeSpeed(ai, 70, 2.8, 2.5), signalSpeed(ai, 3.2), approachJunction(ai, net, everyone, wander, HOW_THEY_TURN, dt));
     ai.lights.left = ai.lights.right = false;
+    if (ai.indicate) ai.lights[ai.indicate > 0 ? 'right' : 'left'] = true;      // turning at the junction
     // Two lanes each way: pass a slower car in the left-hand lane, then come back to the right.
     ai.laneWait = Math.max(0, (ai.laneWait || 0) - dt);
-    if (map.road.lanes[map.indexAt(ai.s)] > 1 && ai.laneWait === 0) {
-      const slower = findAhead(map, ai, everyone, map.laneCentre(ai.s, ai.dir, ai.lane), 45);
-      const laneClear = (lane) => !everyone.some((o) => o !== ai && o.active && Math.abs(o.d - map.laneCentre(ai.s, ai.dir, lane)) < 1.8
-        && map.ahead(ai.s, o.s) * ai.dir > -14 && map.ahead(ai.s, o.s) * ai.dir < 38);
+    if (way.road.lanes[way.indexAt(ai.s)] > 1 && ai.laneWait === 0 && !ai.turn) {
+      const slower = findAhead(ai, seen, way.laneCentre(ai.s, ai.dir, ai.lane), 45);
+      const laneClear = (lane) => !seen.some((o) => Math.abs(o.d - way.laneCentre(ai.s, ai.dir, lane)) < 1.8 && o.ahead > -14 && o.ahead < 38);
       if (ai.lane === 1 && slower && slower.speed >= 0 && slower.speed < ai.cruise - 2 && laneClear(0)) { ai.lane = 0; ai.laneWait = 4; }
       else if (ai.lane === 0 && laneClear(1)) { ai.lane = 1; ai.laneWait = 4; }
     }
-    let lane = map.laneCentre(ai.s, ai.dir, ai.lane);
-    if (Math.abs(ai.d - lane) > 0.8) ai.lights[(lane - ai.d) * ai.dir > 0 ? 'right' : 'left'] = true;       // indicating while it changes lane
+    let lane = way.laneCentre(ai.s, ai.dir, ai.lane);
+    if (Math.abs(ai.d - lane) > 0.8 && !ai.turn) ai.lights[(lane - ai.d) * ai.dir > 0 ? 'right' : 'left'] = true;       // indicating while it changes lane
     ai.honkWait = (ai.honkWait || 0) - 1 / 60;
     ai.lights.head = 1;
 
     // 2. Is someone pushing from behind? (the player or a rival)
     let pusher = null;
-    for (const o of everyone) {
-      if (o === ai || !o.active || !(o.isPlayer || o.kind === 'rival') || o.dir !== ai.dir) continue;
-      const behind = map.ahead(o.s, ai.s) * ai.dir;
-      const asking = o.isPlayer && (playerInfo.flashing || playerInfo.honking);
+    for (const o of seen) {
+      if (!(o.car.isPlayer || o.car.kind === 'rival') || o.dir !== ai.dir) continue;
+      const behind = -o.ahead;
+      const asking = o.car.isPlayer && (playerInfo.flashing || playerInfo.honking);
       if (behind > 0 && behind < (asking ? 45 : 16) && Math.abs(o.d - ai.d) < 2.2 && (o.speed > ai.speed - 1 || asking)) pusher = { asking };
     }
     ai.tailgated = pusher ? ai.tailgated + dt : Math.max(0, ai.tailgated - dt * 2);
@@ -114,10 +128,11 @@ export function createTwoLaneTraffic(scene, map, settings) {
     }
 
     // 3. Keep a gap to the car ahead (2 second rule + a car length).
-    const ahead = findAhead(map, ai, everyone, ai.d, 70);
+    // (In the middle of a turn the junction rules look after it: see approachJunction.)
+    const ahead = ai.turn ? null : findAhead(ai, seen, ai.d, 70);
     if (ahead) {
       const safeGap = 4 + ai.speed * 1.5;
-      if (ahead.speed < 0) {
+      if (ahead.speed < -2) {
         // Something is coming at us head-on in our lane!
         if (ahead.gap < 90) {
           want = Math.min(want, ai.speed * 0.4);
@@ -125,7 +140,7 @@ export function createTwoLaneTraffic(scene, map, settings) {
           if (ai.honkWait <= 0) { ai.honk = true; ai.honkWait = 4; }   // lean on the horn (no high-beam flash: it blinded the player)
         }
       } else if (ahead.gap < safeGap) {
-        want = Math.min(want, Math.max(0, ahead.speed * clamp(ahead.gap / safeGap, 0, 1.05) - (ahead.gap < 3 ? 3 : 0)));
+        want = Math.min(want, Math.max(0, Math.max(0, ahead.speed) * clamp(ahead.gap / safeGap, 0, 1.05) - (ahead.gap < 3 ? 3 : 0)));
       }
     }
     ai.wantSpeed = want;

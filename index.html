@@ -20,6 +20,11 @@
     <div id="popups"></div>
     <div id="banner"></div>
     <div id="prompt"></div>
+    <!-- The next instruction of the route being followed: an arrow, how far, and what to do (src/ui/hud.js: setNav) -->
+    <div id="nav-hint" class="hidden">
+      <svg viewBox="0 0 48 48"><path id="nav-arrow" d=""/></svg>
+      <b id="nav-metres"></b><small id="nav-text"></small>
+    </div>
     <canvas id="minimap" width="180" height="180"></canvas>
     <canvas id="gauge" width="260" height="230"></canvas>
   </div>
@@ -27,7 +32,7 @@
   <!-- Full-screen map (press M) -->
   <div id="map-screen" class="overlay hidden">
     <canvas id="map-canvas"></canvas>
-    <div class="map-caption" id="map-caption">click a place to travel there &nbsp;—&nbsp; press M to close</div>
+    <div class="map-caption" id="map-caption">click a circle to travel there &nbsp;—&nbsp; click a road to be shown the way &nbsp;—&nbsp; press M to close</div>
   </div>
 
   <!-- Main menu: cars down the left, maps down the right, the middle left clear so you can see the car.

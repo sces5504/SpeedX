@@ -15,11 +15,12 @@
 //                 look: { ... } },        body parts (see vehicles/carLook.js)
 //       },
 //     },
+//     career: { reputation: 0, money: 0 },   what the player has earned (game/career.js)
 //   }
 //
-// Change save.data, then call save.write(). A later part of the game (money,
-// reputation, the Blacklist, speed cameras) adds its own section next to
-// `garage`; `version` is there so an old save can be brought up to date.
+// Change save.data, then call save.write(). A later part of the game (the Blacklist,
+// speed cameras) adds its own section next to these; `version` is there so an old
+// save can be brought up to date.
 // ---------------------------------------------------------------------------
 const KEY = 'speedx-save';
 const fresh = () => ({ version: 1, garage: { current: null, cars: {} } });
@@ -43,6 +44,8 @@ export const save = {
   write() {
     try { localStorage.setItem(KEY, JSON.stringify(save.data)); } catch { /* storage full or blocked: keep playing, just not saved */ }
   },
+  // Throw the whole save away (the developer console's "save reset"). Reload the page afterwards.
+  erase() { try { localStorage.removeItem(KEY); } catch { /* storage blocked: there was nothing to erase */ } },
   // The saved entry of one car (made on first use: factory build, first paint).
   car(id) {
     const entry = (save.data.garage.cars[id] ??= { color: 0, build: {}, look: {} });

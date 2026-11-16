@@ -44,6 +44,8 @@ export function buildScenery(map) {
         map.project(x, z, -1, projected);
         const j = projected.index;
         if (Math.abs(projected.d) < Math.max(road.benchL[j], road.benchR[j]) + (kind.minDist ?? 1.5) - 0.5) continue;
+        // ...nor on any of the map's other roads (world/mapData.js: WAYS).
+        if (map.ways.length > 1 && map.spotsAt(x, z).some((spot) => !spot.past && Math.abs(spot.d) < Math.max(spot.way.road.benchL[spot.index], spot.way.road.benchR[spot.index]) + 1)) continue;
         if (hidesABuilding(map, projected)) continue;
         // "where": "woods" = only inside the real forests the map knows, "open" = only outside them.
         if (kind.where && (kind.where === 'woods') !== map.inWoods(x, z)) continue;
