@@ -8,7 +8,7 @@ import { GRAPHICS, PHYSICS, ROAD } from '../config.js';
 import { clamp, damp, lerp, noise1 } from '../core/mathUtils.js';
 import { buildCar } from './carBuilder.js';
 import { buildInterior } from './interior.js';
-import { createVehicle, stepVehicle } from './vehiclePhysics.js';
+import { createVehicle, pickGear, stepVehicle } from './vehiclePhysics.js';
 import { collideWithRoadEdges } from '../game/collisions.js';
 import { shared, makeHeadlightCookie } from '../render/materials.js';
 import { releaseResources } from './carResources.js';
@@ -48,6 +48,7 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
   const player = {
     carId, spec, car, vehicle, interior, beams,
     lightMode: 1,            // 0 off, 1 low beam, 2 high beam
+    beamScale: 1,            // 1 = the beams at full strength; less while a replay films the car (render/replayLook.js)
     flashing: false,         // high-beam flash held
     lastImpact: null,        // filled when we hit a wall this frame
     onGravel: false,
@@ -134,7 +135,7 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
     // Wheels: fronts steer, all roll (rears lock with the handbrake).
     car.wheels.forEach((wheel, index) => {
       if (index < 2) wheel.pivot.rotation.y = v.steerAngle;
-      if (!(v.handbrake && index >= 2)) wheel.spin.rotation.x = -v.wheelAngle * (index >= 2 ? 1 + v.wheelSpin * 0.5 : 1);
+      if (!(v.handbrake && index >= 2 && v.drift < 0.5)) wheel.spin.rotation.x = -v.wheelAngle * (index >= 2 ? 1 + v.wheelSpin * 0.5 : 1);
     });
 
     // Lights
@@ -142,7 +143,7 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
     car.setLights({ head, brake: v.brake > 0.05, reverse: v.gear === -1 });
     const power = head === 0 ? 0 : head === 1 ? 1 : 2.3;
     for (const beam of beams) {
-      beam.intensity = lerp(beam.intensity, power * 760, Math.min(1, dt * 18));
+      beam.intensity = lerp(beam.intensity, power * 760 * player.beamScale, Math.min(1, dt * 18));
       beam.distance = head === 2 ? 260 : 150;
       beam.target.position.y = spec.headlights.y - (head === 2 ? 0.25 : 1.0);
     }
@@ -150,11 +151,20 @@ export function createPlayer(scene, map, spec, colorIndex, mirrorTexture) {
     g.updateMatrixWorld();
     shared.headPos.value.set(0, spec.headlights.y, car.dims.frontZ).applyMatrix4(car.body.matrixWorld);
     shared.headDir.value.set(0, -0.03, -1).transformDirection(car.body.matrixWorld);
-    shared.headPower.value = lerp(shared.headPower.value, power, Math.min(1, dt * 18));
+    shared.headPower.value = lerp(shared.headPower.value, power * player.beamScale, Math.min(1, dt * 18));
     interior.update(v, player.wiperCycle, dt);
   }
   // The owner fitted different parts: drive on with the new finished setup (carSetup.js).
   // Only numbers change, so the 3D car stays as it is.
+  // Put the car exactly here, facing `yaw`, rolling at `speed` (m/s: it only turns the wheels). No
+  // physics at all: scenes (render/director.js) and replays move the car themselves, with this.
+  player.pose = (x, z, yaw, speed = 0, dt = 1 / 60) => {
+    Object.assign(vehicle, { x, z, yaw, vx: -Math.sin(yaw) * speed, vz: -Math.cos(yaw) * speed, yawRate: 0, speed: Math.abs(speed), forwardSpeed: speed,
+      steerAngle: 0, accelLong: 0, accelLat: 0, slipFront: 0, slipRear: 0, wheelSpin: 0, drift: 0 });
+    vehicle.wheelAngle += (speed / spec.wheelRadius) * dt;
+    pickGear(vehicle);                                        // (so a car handed back while moving is in the right gear)
+    updateVisuals(dt);
+  };
   player.applySetup = (newSpec) => {
     player.spec = newSpec;
     Object.assign(vehicle, { spec: newSpec, mass: newSpec.mass, yawInertia: newSpec.mass * vehicle.a * vehicle.b * 1.05 });

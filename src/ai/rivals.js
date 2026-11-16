@@ -17,7 +17,8 @@
 // THE DRIVERS. None of them holds back: in a race every one uses nearly all their car can do
 // (GAMEPLAY.racer: the shares of its cornering grip, braking and power). So what makes one
 // harder to beat than another is the CAR - and each turns up in a different one, tuned and
-// restyled at random (vehicles/randomBuild.js) and rated within reach of yours.
+// restyled at random (vehicles/randomBuild.js) and rated within reach of yours. They never
+// drive a Blacklist driver's car: those are met only by challenging the driver (challenge()).
 //   * On the straights they give away a little while they are level or ahead; one that has
 //     fallen behind finds extra pace (rubber band), one far ahead eases off. Races stay close.
 //   * They weave through traffic: overtake when the other lane is clear, and if they are
@@ -35,6 +36,9 @@ import { HERO_CARS } from '../vehicles/carSpecs.js';
 import { rateCar } from '../vehicles/carRating.js';
 import { peakPower } from '../vehicles/carStats.js';
 import { randomCar } from '../vehicles/randomBuild.js';
+import { setupCar } from '../vehicles/carSetup.js';
+import { dressCar } from '../vehicles/carLook.js';
+import { RULES } from '../game/career.js';
 import { createAiCar, changeAiCar, placeAi, removeAi, moveAi, safeSpeed, findAhead, signalSpeed, lookAround, nearDeadEnd } from './aiCar.js';
 import { approachJunction, wander } from './junctions.js';
 
@@ -66,20 +70,24 @@ export const STYLES = {
 export function createRivals(scene, map, net, playerSpec) {
   // A handful of racers' cars are made up in advance (rating one takes a moment), and one more
   // each time a racer turns up, so there is always a fresh choice.
-  const garage = Array.from({ length: 8 }, () => randomCar(HERO_CARS));
-  const playerRating = rateCar(playerSpec).rating;
+  // (Any car in the game except the Blacklist drivers' own.)
+  const reserved = new Set((RULES.blacklist || []).map((entry) => entry.car));
+  const streetCars = Object.fromEntries(Object.entries(HERO_CARS).filter(([id]) => !reserved.has(id)));
+  const garage = Array.from({ length: 8 }, () => randomCar(streetCars));
+  let playerRating = rateCar(playerSpec).rating;
   // The car for the next racer: of four from the garage, the one rated nearest to "yours, give or take".
   function nextCar() {
     const wanted = playerRating + (Math.random() * 2 - 1) * R.ratingSpread;
     const choice = Array.from({ length: 4 }, () => garage[Math.floor(Math.random() * garage.length)])
       .sort((a, b) => Math.abs(a.rating - wanted) - Math.abs(b.rating - wanted))[0];
-    garage[Math.floor(Math.random() * garage.length)] = randomCar(HERO_CARS);          // (one car in the garage is replaced by a new one)
+    garage[Math.floor(Math.random() * garage.length)] = randomCar(streetCars);         // (one car in the garage is replaced by a new one)
     return choice;
   }
   // Put a racer in a car, with a style of its own.
   function dress(ai, entry) {
     if (ai.entry !== entry) changeAiCar(ai, scene, entry.id, entry.spec);
     ai.entry = entry;
+    ai.boss = null;                                  // (set by bring() when this car is a Blacklist driver's)
     ai.limits = entry.limits;                        // what this car can do: cornering and braking in m/s², top speed in m/s
     ai.rating = entry.rating;
     ai.power = peakPower(entry.setup) * 0.85;        // watts that reach the road, for how hard it can accelerate
@@ -104,8 +112,10 @@ export function createRivals(scene, map, net, playerSpec) {
 
 // finish = the place the race runs to ({ way, s }); length = metres from the start line to it;
   // playerProgress / rivalProgress = metres of that each has covered (length minus what is left).
-  const race = { state: 'none', rival: null, timer: 0, cooldown: 8, finish: null, length: 0, route: null,
-    playerWon: false, message: '', wins: 0, losses: 0, playerProgress: 0, rivalProgress: 0 };
+  // kind = 'street' or 'blacklist' (then entry = that Blacklist driver, from career.json).
+  // inReach = a racer close enough, going your way, to be raced by flashing your lights right now (null = none): the HUD says so.
+  const race = { state: 'none', kind: 'street', entry: null, rival: null, timer: 0, cooldown: 8, finish: null, length: 0, route: null,
+    playerWon: false, message: '', wins: 0, losses: 0, playerProgress: 0, rivalProgress: 0, inReach: null };
   const anyArm = (exits) => exits[Math.floor(Math.random() * exits.length)];
   // How far a car is from the player: by road when they share one, otherwise as the crow flies (and a bit, for the bends).
   const distanceTo = (ai, playerInfo) => (ai.way === playerInfo.way ? Math.abs(ai.way.ahead(playerInfo.s, ai.s)) : Math.hypot(ai.x - playerInfo.x, ai.z - playerInfo.z) * 1.3);
@@ -135,15 +145,15 @@ export function createRivals(scene, map, net, playerSpec) {
   // Where to race to: GAMEPLAY.raceLength further on, the way the road leads. On a small network
   // that could be just round the corner the other way, so the distance is cut down until the
   // place really is that far off by ANY road. Starts the countdown, or says why not.
-  function startCountdown(rival, playerInfo) {
+  function startCountdown(rival, playerInfo, wanted = GAMEPLAY.raceLength) {
     const from = { way: playerInfo.way, s: playerInfo.s, dir: rival.dir };
-    for (let length = GAMEPLAY.raceLength; length >= 700; length *= 0.8) {
+    for (let length = wanted; length >= 700; length *= 0.8) {
       const place = net.walk(from.way, from.s, from.dir, length + 120);     // (the gate stands 120 m clear of the end of a road that just stops)
       if (place.travelled < length + 120) continue;
       const finish = net.walk(from.way, from.s, from.dir, length);
       const anyWay = net.findRoute({ way: from.way, s: from.s }, finish);
       if (!anyWay || anyWay.length < length * 0.85) continue;
-      Object.assign(race, { state: 'countdown', rival, timer: 3, finish, length, message: '' });
+      Object.assign(race, { state: 'countdown', kind: 'street', entry: null, rival, timer: 3, finish, length, message: '' });
       rival.flash = 0.9; rival.hazard = true;
       return;
     }
@@ -162,6 +172,36 @@ export function createRivals(scene, map, net, playerSpec) {
       Object.assign(race, { state: 'none', rival: null, cooldown: 8, message: '' });
       for (const ai of cars) { removeAi(ai); spawn(ai, playerInfo, everyone, true); }
     },
+    // The player changed car or fitted parts: the racers that turn up from now on are rated near the new one.
+    playerChanged(spec) { playerRating = rateCar(spec).rating; },
+    // For the developer console: the race in progress is won on the spot.
+    winNow() { race.given = race.state === 'racing'; return race.given; },
+    // Call the race off (the player went somewhere else, into the garage...). Nobody wins.
+    cancelRace() {
+      if (race.rival) race.rival.hazard = false;
+      Object.assign(race, { state: 'none', rival: null, route: null, cooldown: 8, message: '' });
+    },
+    // Put a Blacklist driver in their car, 25 m behind the player. Returns that AI car.
+    bring(entry, playerInfo) {
+      const setup = setupCar(HERO_CARS[entry.car], entry.build), rated = rateCar(setup), ai = cars[0];
+      dress(ai, { id: entry.car, setup, spec: dressCar(setup, entry.look), rating: rated.rating, limits: rated.limits });
+      ai.style = STYLES.hunter; ai.boss = entry;
+      placeAi(ai, playerInfo.way, playerInfo.way.wrap(playerInfo.s - playerInfo.dir * 25), playerInfo.dir, playerInfo.speed, ai.spec.colors[0]);
+      return ai;
+    },
+    // A Blacklist driver (an entry of career.json) comes to race the player, here and now: one of
+    // the racers is taken off the road and comes back as them, in their car, on the player's tail.
+    // False if no race can start here (one is running, or there is not enough road ahead).
+    challenge(entry, playerInfo) {
+      if (race.state !== 'none' && race.state !== 'invite') return false;
+      const ai = cars[0].boss === entry && cars[0].active ? cars[0] : this.bring(entry, playerInfo);      // (already there, if a scene introduced them first)
+      startCountdown(ai, playerInfo, entry.raceLength);
+      if (race.state !== 'countdown') return false;
+      Object.assign(race, { kind: 'blacklist', entry });
+      return true;
+    },
+    // The countdown has been done elsewhere (the rolling start of a Blacklist race is a scene: game/scenes.js): GO on the next frame.
+    go() { if (race.state === 'countdown') race.timer = 0; },
     // For the developer console: put a racer 25 m behind the player, going the same way at the same speed.
     summon(playerInfo) {
       const ai = cars.find((car) => car !== race.rival) || cars[0];
@@ -180,6 +220,7 @@ export function createRivals(scene, map, net, playerSpec) {
     /** @param busy true while a time attack is running (no races then) */
     update(dt, playerInfo, everyone, grip, busy) {
       race.cooldown = Math.max(0, race.cooldown - dt);
+      race.inReach = null;
 
       for (const ai of cars) {
         ai.honk = false;
@@ -195,6 +236,7 @@ export function createRivals(scene, map, net, playerSpec) {
         const player = lookAround(ai, [playerInfo])[0];
         ai.bored = Math.max(0, ai.bored - dt);
         if (race.state === 'none' && race.cooldown <= 0 && !busy && player && player.dir === ai.dir && playerInfo.speed > 3) {
+          if (Math.abs(player.ahead) < 45) race.inReach = ai;
           if (playerInfo.flashPressed && Math.abs(player.ahead) < 45) { startCountdown(ai, playerInfo); continue; }
           if (ai.bored > 0) continue;                              // it asked, you did not answer: it leaves you alone for a minute
           // Each style makes its offer from its own place: on your tail, just in front of you, or simply keeping pace.
@@ -236,7 +278,7 @@ export function createRivals(scene, map, net, playerSpec) {
           Object.assign(race, { state: 'done', playerWon, message, timer: 6, cooldown: 30, route: null });
           if (playerWon) race.wins++; else race.losses++;
         };
-        if (playerLeft < 10) finish(true, 'YOU WIN');
+        if (playerLeft < 10 || race.given) { race.given = false; finish(true, 'YOU WIN'); }
         else if (rivalLeft < 10) finish(false, 'YOU LOSE');
         else if (playerLeft - rivalLeft > 450) finish(false, 'LEFT BEHIND');
       } else if (race.state === 'done') {

@@ -17,17 +17,18 @@ Then open the address it prints (usually http://localhost:5173).
 | Key | Action |
 | --- | --- |
 | W A S D (or arrows) | throttle, steer, brake / reverse |
-| Space | handbrake |
+| Space | handbrake. At speed: **drift** - tap it while steering into a bend, steer the slide with A / D, hold it with the throttle, steer straight to end it |
 | C | switch camera (chase / cockpit) |
 | Hold left mouse | look around |
 | L | headlights: off → low → high |
 | F | flash high beams (challenge a racer, ask traffic to move over) |
 | H | horn |
-| E | interact (refuel at a pump, start a time attack at an orange cone) |
-| GARAGE (main menu, pause menu) | change car, paint, engine and parts |
-| M | map — click a circle to travel there |
+| E | interact (refuel at a pump, start a time attack at an orange cone, go into a garage or a dealership) |
+| R | watch the replay (when one is offered: after a speed camera, a race or a time attack) |
+| GARAGE (main menu; on the road, drive into a garage) | change car, paint, engine and parts |
+| M | map — every place has its own sign; click a stop to travel there |
 | Backspace | put the car back on the road |
-| Esc | pause (rain and time of night are in this menu) |
+| Esc | pause: rain, time of night, picture filter, audio volume, the Blacklist, how to play, back to the main menu |
 | ~ | developer console: type `help` (add reputation or money, go somewhere, change car...) |
 
 ## Where things live
@@ -39,7 +40,8 @@ src/config.js         every tweakable number: PHYSICS (grip/power/brake boosts),
                       shake, neck, motion blur, crash effects), GRAPHICS (bloom, streaks, colour,
                       damp road, mist, reflections), GAMEPLAY, KEYS
 src/core/             keyboard + mouse input, small math helpers
-src/world/            showroom (the bright room the garage shows your car in),
+src/world/            showroom (the bright room the garage and the dealer show a car in), stage (the black stage a Blacklist
+                      car is unveiled on), careerBuildings (the garage, the dealership, the speed camera),
                       mapData (roads + heights + junctions), roadNet (finding the way round the roads), terrain, road, sea, town (ordinary buildings), signals (traffic lights),
                       sky (night stages, city lights),
                       weather (rain), and the shared library every map is built from:
@@ -61,13 +63,19 @@ src/ai/               aiCar (shared base), junctions (planning, giving way and t
                       traffic (picks each map's rule set), trafficTwoLane (the rules for a two-lane road),
                       rivals (street racers: their styles, and the race to a place)
 src/game/             collisions, challenge (near misses + time attack), save (the player's save file),
-                      career (reputation and money), devCommands (the developer console's commands)
+                      career (reputation, money, cars owned, the Blacklist), shop (prices and buying),
+                      activities (a race or timed run from start to pay-out), scenes (the garage, dealership, Blacklist and
+                      opening scenes), speedTraps (speed cameras), replay (the last seconds again, as a film), blacklistIntros (each Blacklist driver's introduction),
+                      devCommands (the developer console's commands)
 src/render/           cameras, materials (wet-road mirror, retroreflection, light beams),
                       smallLights (coloured glow from tail lamps and neon), reflections (what
-                      car paint mirrors), navArrows (the way to go, drawn on the road), postfx (film camera look), streak (streak filter), filters (optional looks), sparks,
-                      drawDistance (only draws the pieces of the world that are near)
+                      car paint mirrors), navArrows (the way to go, drawn on the road), director (plays a scene: a list of
+                      camera shots), postfx (film camera look), streak (streak filter), filters (optional looks), sparks,
+                      drawDistance (only draws the pieces of the world that are near), replayLook (how a replay is lit)
 src/audio/            engine, wind, rain, pass-bys, crashes; revTest (revving an engine on the spot, to listen to it)
-src/ui/               HUD, map, menus, garage (change car, paint, engine, parts), statBars (rating and ability bars),
+src/ui/               HUD, map, menus, garage (change car, paint, engine, parts), dealer (buy cars), blacklist (the drivers to
+                      beat), statBars (rating and ability bars), wallet (money and reputation, the same on every screen),
+                      mapIcons (the sign of each kind of place on the map),
                       devConsole (the ~ window), CSS
 src/catalog/          the catalogue page (catalog.html): browse everything in the game
 
@@ -77,6 +85,7 @@ public/content/cars/<id>/kit.json  optional: the body parts that car can be rest
 public/content/kits.json     shared body parts that fit any car (wings, skirts, scoops, rims, liveries)
 public/content/upgrades.json the performance parts: groups, options, and exactly what each one changes
 public/content/names.json    THE NAME LIST: the made-up brand and model names players see — edit it to rename things
+public/content/career.json   THE CAREER'S RULES: the starter car, prices, what a win pays, the Blacklist drivers
 public/content/maps/<id>/    one folder per map: map.json + height.bin        ← and here
 public/content/props/        the shared library: index.json lists everything a map can use;
                              <id>/model.glb = an optional model for one of them
@@ -132,10 +141,12 @@ Run `node tools/check-content.mjs` after any change.
   (early, smooth) or a supercharger (everywhere). Which kinds an engine takes is its `fits` in
   `engines.json`; a kit on a factory-turbo engine gives `factoryTurboShare` of its boost. `PHYSICS.powerBoost` was lowered to
   1.3 when parts arrived: a factory car leaves room to grow.
-- **Garage and save file.** `src/ui/garage.js` is the test garage (everything free while
-  `GAMEPLAY.freeParts` is on): click = try it (the bars show the change), APPLY = fit it, CANCEL = put it
-  back. Each car keeps its own paint, engine and parts in the one save file (`src/game/save.js`,
-  `localStorage` key `speedx-save`), and gets them back on the next visit. Changing parts only swaps the
+- **Garage and save file.** `src/ui/garage.js` is the garage: click = try it (the bars show the change),
+  APPLY = fit it (a part not owned yet is bought: the button reads BUY), CANCEL = put it back. Each car keeps
+  its own paint, engine and parts in the save file (`src/game/save.js`) and gets them back on the next
+  visit. There are two saves: the **career** (`localStorage` key `speedx-career`) and the **sandbox**
+  (`speedx-save`: every car and part for nothing - the old test garage); the developer console's
+  `sandbox on / off` switches. Changing parts only swaps the
   finished setup under the same 3D car; changing car rebuilds it, and `carResources.js` frees the old one.
 - **Body parts** (looks only, never performance). A car with `"kit": true` has a `kit.json` beside its
   car.json: groups (front bumper, headlights, spoiler...) with options, each a small patch over car.json
@@ -164,6 +175,73 @@ Run `node tools/check-content.mjs` after any change.
 - **Names.** Players never see a real make or model. Every name comes from `public/content/names.json`
   (`brand` + `name`; `real` is a note for us). Change it there, reload, done. The brands are the made-up
   ones in `reference/speedx/brands/`. Traffic cars are not part of any of this: no engine, no rating.
+
+## The career
+
+You start with one modest car and a little money, beat street racers for reputation and money, earn stars
+at speed cameras and time attacks, spend the money on parts (a garage) and cars (a dealership), and when
+your reputation is high enough a **Blacklist** driver will race you - beat them for the first time and
+their car is yours. HOW TO PLAY (main menu, pause menu) says the same to the player.
+
+- **The rules are data**: `public/content/career.json` - what you start with, what a win pays, the price of
+  every car and part, what each star pays, and the Blacklist drivers (car, reputation asked, race length,
+  prize, their colour, their line, their introduction). The numbers are on the scale of Need for Speed:
+  Most Wanted / Forza Horizon (a win a few thousand, a car tens of thousands). Change a number, reload.
+  `node tools/check-content.mjs` checks the file.
+- **What you have** is kept by `src/game/career.js` in the save file: reputation, money, the cars you own,
+  the Blacklist drivers beaten, your stars. `src/game/shop.js` knows the prices and does the buying: a part
+  is paid for once and then belongs to that car (taken off, it can be put back for nothing). Money and
+  reputation are drawn the same way on every screen by `src/ui/wallet.js`.
+- **One activity at a time** (`src/game/activities.js`): a street race, a Blacklist race or a time attack
+  begins, then either finishes (the reward is worked out and paid) or is cancelled (nothing is paid).
+  Travelling from the map, going to the garage or the menu, changing car and leaving the game all cancel it.
+- **Paid once.** Everything a finished activity gives is handed over by `career.settle()` in one write to
+  the save file, under the activity's own receipt number; the same receipt is never honoured twice.
+- **Stars.** Two activities give one to three stars, and both pay the same way - each level once, the first
+  time it is reached, skipped levels included (`career.awardStars`):
+  - **Speed cameras** (`"speedCameras"` in map.json; `src/game/speedTraps.js`): the speed you pass at.
+  - **Time attacks** (the orange cone at every stop; `src/game/challenge.js`): the clock at the gate. The
+    times asked for come from an average speed per star (`"timeAttack": { "kmh": [..] }` in career.json, or
+    in a map's map.json for that map), so they fit any length of run.
+  The map screen shows the stars you have under each camera and each stop.
+- **Street racers** in reach are announced: when one is close enough and going your way, the HUD says
+  "F - flash your lights to race" with their car and its rating (`race.inReach`, `src/ai/rivals.js`).
+- **The Blacklist screen** (`src/ui/blacklist.js`; main menu and pause menu): the drivers down the left, the
+  chosen one's car on the black stage in the middle (`src/world/stage.js`), outlined in their colour, and
+  on the right a meter of your reputation against what they ask, the prize and the race.
+- **A Blacklist race** (`challengeDriver` in main.js) is made out on the road, in three parts:
+  1. the driver's own **introduction** (`src/game/blacklistIntros.js` - every driver has one; `"intro"` in
+     career.json names it; it can be skipped);
+  2. a **rolling start** (`rollingStart` in `src/game/scenes.js`): the game drives both cars side by side
+     to the line, 3-2-1 - nobody can gain anything before GO. It cannot be skipped;
+  3. the race, to a gate. Street racers never drive a Blacklist driver's car.
+  To add a driver: `.claude/skills/speedx-blacklist`.
+- **Garages and dealerships are places.** Two more kinds of stop (`"type": "garage"` / `"dealer"` in a map's
+  `pois`), built the same way as the gas station - by code, in `src/world/careerBuildings.js`, after the
+  pictures in `reference/buildings/`. Press E in front of the garage's right-hand door: it rolls up, the car
+  drives in, and the garage screen opens (TRAVEL there goes to the map). Press E at a dealership's entrance
+  for the dealer screen (`src/ui/dealer.js`): the cars for sale - the only place cars are sold.
+  Inside, each has a room of its own (`src/world/showroom.js`: ROOMS): the garage a workshop (painted bay,
+  roller door, tool chests, tyres, work lamps), the dealership a salon at night (turntable, rings of light,
+  a glass wall with the town beyond).
+- **The garage screen** (`src/ui/garage.js`) has two tabs - PERFORMANCE and APPEARANCE - and two arrows
+  either side of the car's name that go through the cars you own.
+- **Scenes.** `src/render/director.js` plays a scene - a list of shots, each a camera move and whatever it
+  moves - and `src/game/scenes.js` holds the game's scenes: into and out of the garage, into the dealership,
+  the opening of a career, the rolling start. Any scene can be skipped (Space, Enter, Esc) unless it says
+  otherwise: skipping takes every remaining shot straight to its last moment, so the game always ends up in
+  the state the scene would have left it in. (Developer console: `intro` makes you a first-time player
+  again, so the opening plays once more.)
+- **Replays** (`src/game/replay.js`): a replay is not a script or a video but a RECORDING OF WHERE THE CARS
+  WERE - thirty times a second, the last 14 seconds, in memory only. After a speed camera, a race or a
+  time attack, press R: the clip is cut into shots chosen for speed (cameras standing low at the roadside
+  that the car blasts past, cameras bolted low on the car), the finish gate is shown again, and only the
+  last instant before a finish line plays in slow motion. A replay is lit like a night shoot
+  (`src/render/replayLook.js`, `GRAPHICS.replay`): fill light, softer headlights. Driving is not touched.
+  Only the 3D models are moved, so the game carries on exactly where it was.
+- **Drift** (`PHYSICS.drift` in config.js; steps 4b and 6b of `src/vehicles/vehiclePhysics.js`): what SPACE
+  does at speed. Until SPACE is pressed none of it is in play - ordinary handling is exactly as it was.
+- Not built yet: checkpoint races.
 
 ## How the picture is made
 
@@ -278,8 +356,8 @@ Everything is generated by code at start-up — no model or texture downloads.
 - **Rain** is in `world/weather.js` (streaks, splashes, tyre spray) and `postfx.js` (drops on the glass).
 
 Developer console: press `~` in the game and type `help`. The window is `src/ui/devConsole.js`; the commands
-(`rep`, `money`, `tp`, `goto`, `pos`, `car`, `fuel`, `rain`, `night`, `rival`, `race`, `save`) are one short entry
-each in `src/game/devCommands.js`. Reputation and money are kept by `src/game/career.js`, in the save file.
+(`rep`, `money`, `tp`, `goto`, `pos`, `car`, `fuel`, `rain`, `night`, `rival`, `race`, `win`, `blacklist`,
+`sandbox`, `save`) are one short entry each in `src/game/devCommands.js`.
 
 Browser console helpers: `speedx.preview('<carId>')`, `speedx.setOrbit(angle, speed)`, `speedx.weather.toggle()`,
 `speedx.sky.setPreset(n)`, `speedx.step(120)` (fast-forward 120 frames — handy when the tab is in the background).

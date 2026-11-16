@@ -119,6 +119,9 @@ const POP_LEVEL = 1.25;         // exhaust crackles and bangs
 export function createAudio() {
   const audio = { ready: false, start, preload, update() {}, impact() {}, crash() {}, passBy() {}, beep() {}, hornAt() {}, shift() {}, play() {}, setPaused() {}, clips: {} };
   let lastUpdate = 0;
+  const savedVolume = parseFloat(localStorage.getItem('speedx-volume'));
+  let volume = Number.isFinite(savedVolume) ? savedVolume : 1;      // 0..1, set by the pause menu's AUDIO bar (audio.setVolume)
+  let silenced = false;                                             // the game is paused: the sound is off whatever the volume
   let ctx, master, muffle, outside, cabinFilter, echo, noiseBuffer, probe, probeData, lastCheck = 0, playerCar = NO_CAR;
   const buffers = {};                 // decoded recordings (kept if the sound system has to restart)
 
@@ -154,7 +157,7 @@ export function createAudio() {
   // Build the whole chain of sound nodes on the current audio context.
   function wire() {
     lastCheck = 0; lastUpdate = 0;              // a new context's clock starts from zero
-    master = ctx.createGain(); master.gain.value = 0.9;
+    master = ctx.createGain(); master.gain.value = 0.9 * volume;
     muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000;   // closes after a crash
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = -16; limiter.ratio.value = 5; limiter.attack.value = 0.004; limiter.release.value = 0.25;
@@ -580,6 +583,13 @@ export function createAudio() {
     gain.gain.setValueAtTime(volume, now + 0.7);
     gain.gain.linearRampToValueAtTime(0, now + 0.85);
   };
-  audio.setPaused = (paused) => { if (audio.ready) set(master.gain, paused ? 0 : 0.9, 0.08); };
+  audio.setPaused = (paused) => { silenced = paused; if (audio.ready) set(master.gain, paused ? 0 : 0.9 * volume, 0.08); };
+  // How loud the whole game is: 0..1 (the AUDIO bar of the pause menu). Kept for next time.
+  audio.setVolume = (level) => {
+    volume = Math.min(1, Math.max(0, level));
+    localStorage.setItem('speedx-volume', volume);
+    if (audio.ready && !silenced) set(master.gain, 0.9 * volume, 0.08);
+  };
+  Object.defineProperty(audio, 'volume', { get: () => volume });
   return audio;
 }

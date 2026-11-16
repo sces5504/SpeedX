@@ -1,0 +1,145 @@
+{
+  "about": [
+    "THE CAREER: what the player starts with, what things cost, what a win pays, and the Blacklist.",
+    "Every number here is read by src/game/career.js, shop.js and activities.js - change it here, reload, done.",
+    "THE SCALE is that of the street-racing games this one is modelled on (Need for Speed: Most Wanted, Forza Horizon):",
+    "a win pays a few thousand, a part a few thousand, a car tens of thousands. Keep new numbers on that scale.",
+    "",
+    "start        the car the player owns on day one, and the money in their pocket.",
+    "streetRace   what beating a street racer pays, for a race of the usual length against a car rated like yours.",
+    "             A harder rival (rated above you) pays more, an easier one less; a shorter race pays less.",
+    "cars         the dealership's price of each car. A car with no price is never for sale (a Blacklist prize).",
+    "parts        the garage's price of each performance part: one number for every option of the group,",
+    "             or a list with one price per option, in the order of upgrades.json.",
+    "engineSwap   another engine costs  base + perPs x its power in PS.",
+    "bodyPart     the price of any body part (bumper, wing, rims, livery...). Paint is free.",
+    "             A part is paid for once: after that it belongs to that car and can be refitted for nothing.",
+    "",
+    "ACTIVITIES with one, two and three stars. Each star level pays ONCE, the first time it is reached",
+    "(reach three at once and the two skipped are paid too): reputation and money, one number per level.",
+    "speedCamera  drive past a camera fast. The cameras, and the speeds their stars ask for, are in each map's map.json.",
+    "timeAttack   a timed run from the cone at any stop. kmh = the AVERAGE speed over the run that earns each star",
+    "             (so the times asked for follow from the length of the run). A map may ask for other speeds:",
+    "             \"timeAttack\": { \"kmh\": [..] } in its map.json - a mountain road is slower than a highway.",
+    "",
+    "blacklist    the drivers to beat, in the order they are listed (the last one is number 1).",
+    "             reputation  what the player needs before this driver will race them",
+    "             car, build, look   what they drive (build and look as in the save file; {} = as it left the factory).",
+    "                         Street racers never turn up in a Blacklist driver's car.",
+    "             raceLength  metres",
+    "             prize       paid the FIRST time they are beaten: money, reputation - and their car.",
+    "                         Beating them again pays like a street race.",
+    "             line        a few words about them, shown on the Blacklist screen and in their introduction",
+    "             colour      their own colour: the glowing lines of their introduction and their card",
+    "             intro       which introduction plays before the race (src/game/blacklistIntros.js). Every driver has their own.",
+    "             To add a driver: .claude/skills/speedx-blacklist."
+  ],
+  "start": {
+    "car": "ae86",
+    "money": 5000
+  },
+  "streetRace": {
+    "money": 2500,
+    "reputation": 300
+  },
+  "cars": {
+    "ae86": {
+      "price": 14000
+    },
+    "evo2": {
+      "price": 34000
+    },
+    "s13": {
+      "price": 38000
+    },
+    "fd": {
+      "price": 52000
+    },
+    "veyron": {}
+  },
+  "parts": {
+    "internals": [
+      4000,
+      9000,
+      18000
+    ],
+    "induction": 14000,
+    "ecu": [
+      1500,
+      3500,
+      7000
+    ],
+    "gearbox": [
+      2500,
+      6000,
+      12000
+    ],
+    "brakes": [
+      2000,
+      4500,
+      9000
+    ],
+    "weight": [
+      2000,
+      5000,
+      11000
+    ],
+    "tyres": [
+      2000,
+      4500,
+      9500
+    ]
+  },
+  "engineSwap": {
+    "base": 8000,
+    "perPs": 45
+  },
+  "bodyPart": 1200,
+  "speedCamera": {
+    "reputation": [
+      100,
+      200,
+      400
+    ],
+    "money": [
+      250,
+      500,
+      1000
+    ]
+  },
+  "timeAttack": {
+    "kmh": [
+      85,
+      105,
+      125
+    ],
+    "reputation": [
+      150,
+      300,
+      600
+    ],
+    "money": [
+      500,
+      1000,
+      2000
+    ]
+  },
+  "blacklist": [
+    {
+      "id": "vanta",
+      "name": "VANTA",
+      "line": "Nobody has seen its tail lights twice.",
+      "colour": "#59d7e6",
+      "intro": "unveil",
+      "car": "veyron",
+      "build": {},
+      "look": {},
+      "reputation": 6000,
+      "raceLength": 3500,
+      "prize": {
+        "money": 50000,
+        "reputation": 3000
+      }
+    }
+  ]
+}

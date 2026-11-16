@@ -107,26 +107,28 @@ button.primary { background: #57ff9a; color: #04130a; border-color: #57ff9a; fon
 .rating-chip { float: right; font: 800 15px "Helvetica Neue", Arial, sans-serif; color: #57ff9a; }
 
 /* ---- Garage (src/ui/garage.js): the same three columns as the main menu ---- */
-#garage { position: fixed; inset: 0; display: grid; grid-template-columns: 300px 1fr 300px; gap: 18px; padding: 22px;
+#garage, #dealer, #blacklist { position: fixed; inset: 0; display: grid; grid-template-columns: 300px 1fr 300px; gap: 18px; padding: 22px;
   background: linear-gradient(90deg, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.8)),
               linear-gradient(0deg, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0) 38%); }
-#garage-car-name { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 0 12px #000; }
-#garage-car-name small { display: block; font: 11px "SF Mono", "Menlo", monospace; letter-spacing: 2px; color: #9fb3a6; margin-top: 4px; }
+#garage-car-name, #dealer-car-name, #blacklist-name { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 0 12px #000; }
+#garage-car-name small, #dealer-car-name small, #blacklist-name small { display: block; font: 11px "SF Mono", "Menlo", monospace; letter-spacing: 2px; color: #9fb3a6; margin-top: 4px; }
 .preview-note { min-height: 18px; margin: 6px 0; font-size: 11px; letter-spacing: 3px; color: #ffd166; }
 .garage-buttons { display: flex; gap: 10px; justify-content: center; }
 .garage-buttons button.primary { padding: 12px 40px; font-size: 14px; }
 button:disabled { opacity: 0.3; cursor: default; }
 button:disabled:hover { border-color: rgba(255, 255, 255, 0.3); }
 button.primary:disabled:hover { border-color: #57ff9a; }
-#btn-open-garage { display: block; margin: 8px auto 0; padding: 8px 26px; font-size: 12px; }
+#btn-open-garage, #btn-open-how { margin-top: 8px; padding: 8px 26px; font-size: 12px; }
+#car-list h2 { margin: 12px 0 2px; }
+button:disabled { opacity: 0.4; cursor: default; }
 .car-card small { display: block; font-size: 9px; letter-spacing: 3px; color: #59d7e6; }
 .car-card .tag { float: right; font-size: 9px; letter-spacing: 2px; color: #ffd166; }
 .car-card.fitted { border-color: rgba(87, 255, 154, 0.55); }
 .car-card.fitted .tag { color: #57ff9a; }
 .swatch-grid { flex-direction: row; flex-wrap: wrap; gap: 12px; padding: 6px 2px; }
 /* the middle of the garage screen is empty: clicks and drags there go to the 3D picture (look round the car) */
-#garage { pointer-events: none; background: linear-gradient(90deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 26%, rgba(0, 0, 0, 0) 74%, rgba(0, 0, 0, 0.72)); }
-#garage > * { pointer-events: auto; }
+#garage, #dealer, #blacklist { pointer-events: none; background: linear-gradient(90deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 26%, rgba(0, 0, 0, 0) 74%, rgba(0, 0, 0, 0.72)); }
+#garage > *, #dealer > *, #blacklist > * { pointer-events: auto; }
 .garage-buttons { margin-top: 8px; }
 #btn-garage-rev, #btn-garage-lights { padding: 8px 18px; font-size: 11px; }
 #btn-garage-rev { min-width: 190px; }
@@ -140,3 +142,80 @@ button.primary:disabled:hover { border-color: #57ff9a; }
 #dev-console-log .bad { color: #ff5148; }
 #dev-console-line { display: flex; gap: 8px; align-items: center; padding: 6px 22px 10px; color: #57ff9a; }
 #dev-console-input { flex: 1; background: none; border: none; outline: none; color: #e8f2ea; font: inherit; letter-spacing: 1px; }
+
+/* ---- Scenes (src/render/director.js): black bars, the skip hint, words over the picture, the fade to black ---- */
+#cinema { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+#cinema .bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.35s ease; }
+#cinema .bar.top { top: 0; }
+#cinema .bar.bottom { bottom: 0; display: flex; align-items: center; justify-content: flex-end; overflow: hidden; }
+#cinema.on .bar { height: 11vh; }
+#cinema-skip { margin-right: 28px; font-size: 11px; letter-spacing: 3px; color: #9fb3a6; }
+#cinema-title { position: absolute; left: 7vw; bottom: 16vh; font: italic 900 54px "Helvetica Neue", Arial, sans-serif; letter-spacing: 4px;
+  text-shadow: 0 0 18px rgba(0, 0, 0, 0.9); opacity: 0; transition: opacity 0.5s; }
+#cinema-title.on { opacity: 1; }
+#cinema-title small { display: block; font: 13px "SF Mono", "Menlo", monospace; letter-spacing: 4px; color: #57ff9a; margin-top: 6px; }
+#cinema-fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+
+/* ---- What the player has (src/ui/wallet.js): money written large, reputation under it ---- */
+/* (the same type as the rest of the menus - only larger, so it is the first thing read) */
+.wallet { margin: -8px 0 16px; letter-spacing: 2px; color: #ffd166; }
+.wallet b { display: block; font-weight: normal; font-size: 20px; letter-spacing: 3px; line-height: 1.5; }
+.wallet span { font-size: 12px; }
+.wallet i { font-style: normal; }
+
+/* ---- The garage's two tabs, and the arrows that change car ---- */
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs button { flex: 1; padding: 9px 4px; font-size: 11px; letter-spacing: 2px; color: #9fb3a6; }
+.tabs button.selected { border-color: #57ff9a; background: rgba(20, 44, 30, 0.8); color: #e8f2ea; }      /* (as a selected card) */
+.car-switch { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.car-switch #garage-car-name { min-width: 340px; }
+button.arrow { padding: 8px 14px; font-size: 14px; letter-spacing: 0; }
+#garage-car-name small.count { color: #57ff9a; margin-bottom: 2px; }
+
+/* ---- The pause menu's AUDIO bar ---- */
+.slider { display: flex; align-items: center; gap: 12px; padding: 9px 18px; letter-spacing: 3px; font-size: 13px;
+  background: rgba(8, 12, 10, 0.8); border: 1px solid rgba(255, 255, 255, 0.3); }
+.slider input { flex: 1; accent-color: #57ff9a; cursor: pointer; }
+.slider b { min-width: 48px; text-align: right; color: #57ff9a; }
+#menu-pause button { padding: 10px 26px; }
+
+/* ---- HOW TO PLAY (index.html) ---- */
+#how-to-play { background: rgba(0, 6, 3, 0.94); z-index: 5; }
+.how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 18px; }
+.how-grid .car-card { cursor: default; font-size: 11.5px; line-height: 1.75; padding: 14px; }
+.how-grid .car-card:hover { border-color: rgba(255, 255, 255, 0.18); }
+.how-grid .car-card h3 { font-size: 15px; letter-spacing: 3px; color: #57ff9a; margin: 2px 0 8px; }
+.how-grid .car-card b { color: #e8f2ea; }
+
+/* ---- The Blacklist: a driver's card (main menu and Blacklist screen), the reputation meter, the prize ---- */
+/* --driver is that driver's own colour (career.json: "colour"), set on the card by the script */
+/* A driver's card is a car card (the rank is its rating chip); under it a bar like the ability bars. */
+.driver-card .tag { float: none; display: block; margin-top: 2px; }
+.driver-card.beaten { opacity: 0.6; }
+.rep-bar { height: 6px; margin: 6px 0 2px; background: rgba(255, 255, 255, 0.12); }
+.rep-bar i { display: block; height: 100%; background: var(--driver, #57ff9a); }
+#blacklist h1 { font-size: 46px; letter-spacing: 3px; }
+/* the driver's name: the game's own title lettering (as SPEEDX, as a scene's caption) */
+#blacklist-name { font-size: 34px; font-style: italic; font-weight: 900; letter-spacing: 4px; line-height: 1.1; }
+#blacklist-name em { display: block; font: 12px "SF Mono", "Menlo", monospace; letter-spacing: 6px; margin-bottom: 4px; }
+#blacklist-name small { font-style: normal; font-weight: 400; }
+/* the reputation meter: the same box, number and bar as a car's rating */
+.rep-meter { padding: 10px 14px; margin-bottom: 12px; background: rgba(8, 12, 10, 0.72); border: 1px solid rgba(255, 255, 255, 0.18); }
+.rep-meter b { display: block; font: 800 30px "Helvetica Neue", Arial, sans-serif; line-height: 1; color: #57ff9a; }
+.rep-meter b span { font: 12px "SF Mono", "Menlo", monospace; letter-spacing: 2px; color: #9fb3a6; }
+.rep-meter .rep-bar { margin: 10px 0 8px; }
+.rep-meter p { margin: 0; font-size: 10px; letter-spacing: 3px; color: #ffd166; }
+.rep-meter.ready p { color: #57ff9a; }
+.car-card.plain { cursor: default; }
+.car-card.plain:hover { border-color: rgba(255, 255, 255, 0.18); }
+#blacklist-prize .car-card b { float: right; font-weight: normal; letter-spacing: 2px; color: #ffd166; }
+#blacklist .menu-side h2 { margin-top: 4px; }
+
+/* ---- The map screen's legend (src/ui/mapView.js) ---- */
+.map-legend { display: flex; gap: 22px; margin-top: 8px; font-size: 11px; letter-spacing: 2px; color: #b9c6bd; }
+.map-legend span { display: flex; align-items: center; gap: 7px; }
+.map-legend canvas { width: 22px; height: 22px; }
+#cinema-count { position: absolute; top: 30%; left: 0; right: 0; text-align: center; font: 800 120px "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 6px; text-shadow: 0 0 24px rgba(0, 0, 0, 0.9); opacity: 0; }
+#cinema-count.on { animation: count-pop 0.9s ease-out forwards; }
+@keyframes count-pop { 0% { opacity: 0; transform: scale(1.6); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0.85; } }

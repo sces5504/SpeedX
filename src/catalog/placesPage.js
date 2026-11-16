@@ -10,7 +10,7 @@
 // traffic); which maps use what comes from each map's map.json.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
-import { GAMEPLAY, MPH, ROAD } from '../config.js';
+import { GAMEPLAY, KMH, ROAD } from '../config.js';
 import { add, badge, card, el, facts, fmt } from './dom.js';
 import { measureObject } from './viewer.js';
 import { MARK_COLORS, boxMark, ringMark } from './marks.js';
@@ -120,7 +120,7 @@ function roadLines(length) {
 function openRules(id, page) {
   const about = page.library.builtIn?.traffic?.[id];
   page.showStage(false);                                    // nothing to show in 3D
-  const kmh = (metresPerSecond) => `${fmt(metresPerSecond * 3.6, 0)} km/h（${fmt(metresPerSecond * MPH, 0)} mph）`;
+  const kmh = (metresPerSecond) => `${fmt(metresPerSecond * KMH, 0)} km/h`;
   const users = Object.entries(page.mapInfos).filter(([, info]) => rulesOf(info) === id);
   add(page.info,
     el('header', { class: 'title' }, el('h2', {}, id), el('p', {}, badge('交通規則'), id === DEFAULT_RULES && badge('預設', 'good')),

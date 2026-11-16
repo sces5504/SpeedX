@@ -5,8 +5,8 @@ import { KEYS } from '../config.js';
 const held = new Set();      // key codes currently down
 const pressed = new Set();   // key codes that went down since the last frame
 
-// Keys typed into a text box (the developer console) are not game keys.
-const typing = (e) => e.target.tagName === 'INPUT';
+// Keys typed into a text box (the developer console) are not game keys. (A slider is not a text box.)
+const typing = (e) => e.target.tagName === 'INPUT' && e.target.type !== 'range';
 window.addEventListener('keydown', (e) => {
   if (typing(e)) return;
   if (e.code === 'Space' || e.code.startsWith('Arrow') || e.code === 'Backspace') e.preventDefault();

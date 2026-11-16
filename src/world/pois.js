@@ -36,9 +36,28 @@ const STOP_LOOK = {
 //   lot.poi                                    the stop's entry in map.json (name, length, depth, color, sign)
 //   lot.place(object, along, out, y?, turn?)   put an object in the lot
 //   lot.park(along, out, turn, who?)           mark a place where a parked car may stand
+//                                              (who: 'traffic', 'racers', or 'display' = a car for sale, always there)
+//   lot.parkIn(object, { x, z, turn })         the same, at a place inside an object already put down (its own coordinates)
 // To add a kind of stop: write its layout, add it to STOP_LAYOUTS, and describe it in
 // public/content/props/index.json ("builtIn" -> "stops") so maps and tools know it exists.
-const STOP_LAYOUTS = { gas: layStation, mart: layStation, turnout: layTurnout };
+const STOP_LAYOUTS = { gas: layStation, mart: layStation, turnout: layTurnout, garage: layGarage, dealer: layDealer };
+
+// Garage: the shed with its three roller doors (the right-hand one is the way in: press E in front
+// of it), a lamp at each end of the lot, two cones by the corner, room for a couple of racers' cars.
+function layGarage({ poi, half, place, park }) {
+  place(makeObject('garage'), 0, poi.depth - 6);
+  for (const a of [-half + 4, half - 4]) place(makeObject('street-lamp', { color: '#ffb46a' }), a, ROAD.barrierOffset + 2.6);
+  for (const k of [0, 1]) place(makeObject('cone'), -9.2 - k * 0.8, poi.depth - 11.6 - k * 0.5);
+  for (let k = 0; k < 2; k++) park(14 + k * 4, poi.depth - 5, -Math.PI / 2, 'racers');
+}
+
+// Dealership: the showroom with a car in its window, two lamps, and a few cars for sale out on the forecourt.
+function layDealer({ poi, half, place, park, parkIn }) {
+  const showroom = place(makeObject('dealership', { name: poi.sign || 'DEALERSHIP' }), 0, poi.depth - 7);
+  parkIn(showroom, showroom.userData.display);
+  for (const a of [-half + 4, half - 4]) place(makeObject('street-lamp', { color: '#ffb46a' }), a, ROAD.barrierOffset + 2.6);
+  for (let k = 0; k < 3; k++) park(-half + 12 + k * 4.2, ROAD.barrierOffset + 7, -Math.PI / 2 + 0.5, 'display');
+}
 
 // Gas station or mini-mart: pump canopy, store with parking bays, price sign, two lamps.
 function layStation({ poi, half, place, park }) {
@@ -85,7 +104,7 @@ export function buildPois(map) {
     for (const lamp of object.userData.lamps || []) lamps.push({ ...lamp, poi, position: object.localToWorld(lamp.at.clone()) });
     for (const neon of object.userData.neons || []) neons.push({ ...neon, position: object.localToWorld(neon.at.clone()) });
     const todo = object.userData.interact;
-    if (todo) interactables.push({ type: todo.type, label: todo.label, radius: todo.radius, position: object.localToWorld(todo.at.clone()), poi });
+    if (todo) interactables.push({ type: todo.type, label: todo.label, radius: todo.radius, position: object.localToWorld(todo.at.clone()), poi, object });
     for (const [x, z, across, along] of object.userData.solids || []) {
       const centre = object.localToWorld(new THREE.Vector3(x, 0, z));
       obstacles.push({ x: centre.x, z: centre.z, yaw: object.rotation.y, halfWidth: across / 2, front: along / 2, rear: along / 2 });
@@ -111,6 +130,10 @@ export function buildPois(map) {
       park(along, out, turn, who = 'traffic') {
         const p = map.pointAt(poi.s + along, (out + poi.shift) * poi.side);
         parking.push({ x: p.x, y: p.y, z: p.z, yaw: p.yaw + turn * poi.side, poi, who });
+      },
+      parkIn(object, { x, z, turn }) {
+        const p = object.localToWorld(new THREE.Vector3(x, 0, z));
+        parking.push({ x: p.x, y: object.position.y + 0.2, z: p.z, yaw: object.rotation.y + turn, poi, who: 'display' });
       },
     };
     for (let a = -half; a <= half; a += 3.4) lot.place(makeObject('barrier'), a, poi.depth + 0.9);

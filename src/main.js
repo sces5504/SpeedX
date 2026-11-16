@@ -35,13 +35,25 @@ import { dressCar } from './vehicles/carLook.js';
 import { preloadCarModels } from './vehicles/carModel.js';
 import { buildCar } from './vehicles/carBuilder.js';
 import { createPlayer } from './vehicles/playerCar.js';
-import { absorbHit, updateAiLights } from './ai/aiCar.js';
+import { absorbHit, removeAi, updateAiLights } from './ai/aiCar.js';
 import { createTraffic } from './ai/traffic.js';
 import { createRivals } from './ai/rivals.js';
 import { collideCars } from './game/collisions.js';
 import { createChallenge } from './game/challenge.js';
 import { save } from './game/save.js';
-import { career } from './game/career.js';
+import { career, loadCareer } from './game/career.js';
+import { createActivities } from './game/activities.js';
+import { shop } from './game/shop.js';
+import { createSpeedTraps } from './game/speedTraps.js';
+import { createReplay } from './game/replay.js';
+import { rateCar } from './vehicles/carRating.js';
+import { createBlacklistScreen } from './ui/blacklist.js';
+import { createDealer } from './ui/dealer.js';
+import { createDirector } from './render/director.js';
+import { createStage } from './world/stage.js';
+import { dealerIn, gameIntro, garageIn, garageOut, rollingStart } from './game/scenes.js';
+import { blacklistIntro } from './game/blacklistIntros.js';
+import { SANDBOX } from './game/save.js';
 import { addDevCommands } from './game/devCommands.js';
 import { createCameras } from './render/cameras.js';
 import { createPostFx } from './render/postfx.js';
@@ -51,6 +63,7 @@ import { shared, makeHeadlightCookie } from './render/materials.js';
 import { smallLights } from './render/smallLights.js';
 import { createCarProbe } from './render/reflections.js';
 import { createNavArrows } from './render/navArrows.js';
+import { createReplayLook } from './render/replayLook.js';
 import { createAudio, soundOf } from './audio/audio.js';
 import { createRevTest } from './audio/revTest.js';
 import { createShowroom } from './world/showroom.js';
@@ -73,6 +86,7 @@ const scene = new THREE.Scene();
 // ---- World ----------------------------------------------------------------------
 // Cars and maps are content folders under public/content/ (add-ons live there too).
 await loadCars();
+await loadCareer();                             // the career's rules, and a new player's first car (game/career.js)
 await Promise.all([preloadCarModels(Object.values(ALL_CARS)), loadProps()]);
 const mapList = await listMaps();
 const wantedMap = new URLSearchParams(location.search).get('map') || localStorage.getItem('speedx-map');
@@ -91,6 +105,12 @@ pois.lamps.push(...town.lamps); pois.neons.push(...town.neons);
 const signals = buildSignals(map);
 scene.add(signals.group);
 pois.neons.push(...signals.lights);
+// Speed cameras ("speedCameras" in map.json) and the recorder that lets a moment be watched again.
+const traps = createSpeedTraps(map);
+scene.add(traps.group);
+pois.neons.push(...traps.neons);
+const replay = createReplay();
+const replayLook = createReplayLook(scene);     // how a replay is lit (render/replayLook.js)
 const sky = createSky(scene, renderer, map.info.cityLights);
 const weather = createWeather(scene);
 // Rain as the player left it last time; the very first time, as FIRST_TIME says.
@@ -105,6 +125,13 @@ const challenge = createChallenge(scene, map);
 const audio = createAudio();
 audio.preload().catch(() => {});       // download every sound now, so pressing DRIVE does not have to wait for them
 const hud = createHud();
+const activities = createActivities();          // the race or timed run in progress, from start to pay-out (game/activities.js)
+// Whatever the player was in the middle of is called off: nothing is paid, nothing is lost.
+function abandonActivity() {
+  if (rivals) rivals.cancelRace();
+  challenge.cancel(); challenge.hideGate();
+  activities.cancel();
+}
 const mapView = createMapView(map, (poi) => travelTo(poi), (x, z) => setDestination(x, z));
 // Navigation: a place the player picked on the map screen, and the shortest way there from the car.
 const nav = { goal: null, route: null };
@@ -122,8 +149,10 @@ const trafficBeams = Array.from({ length: 3 }, () => {
 });
 
 // Parked cars at the gas station, mart and turnouts (solid, but never move).
-const parked = pois.parking.filter((_, i) => i % 2 === 0).map((spot, i) => {
-  const ids = Object.keys(spot.who === 'racers' ? HERO_CARS : TRAFFIC_CARS);
+// (Half the spots are left empty - except a dealership's display spots, which always hold a car that is for sale.)
+const parked = pois.parking.filter((spot, i) => spot.who === 'display' || i % 2 === 0).map((spot, i) => {
+  const sold = Object.keys(HERO_CARS).filter((id) => shop.carPrice(id) !== null);
+  const ids = spot.who === 'traffic' ? Object.keys(TRAFFIC_CARS) : sold;      // (racers park the same cars the dealer sells: never a Blacklist driver's)
   const spec = ALL_CARS[ids[i % ids.length]];
   const car = buildCar(spec, spec.colors[i % spec.colors.length]);
   car.group.position.set(spot.x, spot.y, spot.z);
@@ -134,7 +163,7 @@ const parked = pois.parking.filter((_, i) => i % 2 === 0).map((spot, i) => {
 });
 
 // Buildings, pumps, columns and lamp posts: solid and immovable, like the parked cars.
-const solids = [...parked, ...[...pois.obstacles, ...signals.obstacles].map((o) => ({ ...o, active: true, vx: 0, vz: 0, yawRate: 0, mass: 1e6, yawInertia: 1e9 }))];
+const solids = [...parked, ...[...pois.obstacles, ...signals.obstacles, ...traps.obstacles].map((o) => ({ ...o, active: true, vx: 0, vz: 0, yawRate: 0, mass: 1e6, yawInertia: 1e9 }))];
 
 const traffic = createTraffic(scene, map, net);
 let player = null, rivals = null;
@@ -161,6 +190,8 @@ function spawnPlayer(carId) {
   else player.placeAt(startPoi.s - 30, startPoi.side * (ROAD.barrierOffset + startPoi.shift + 3), 1);       // start in the gas station lot
   player.update(1 / 60, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);
   rig.snapTo(player);
+  abandonActivity();                                           // (a race does not survive a change of car)
+  replay.clear();
   rivals = createRivals(scene, map, net, player.spec);
   const info = playerInfo();
   traffic.reset(info, [info]);
@@ -171,7 +202,8 @@ function spawnPlayer(carId) {
 // the traffic around it. `name` is shown on arrival.
 // way = which road (the main one unless told otherwise).
 function teleport(s, d, name, way = map.ways[0]) {
-  challenge.cancel();
+  abandonActivity();
+  replay.clear();
   player.placeAt(s, d, 1, way);
   player.update(1 / 60, { throttle: 0, brake: 0, steer: 0, handbrake: true }, 1);      // (so the car knows at once which road it is on)
   rig.snapTo(player);
@@ -252,8 +284,15 @@ const menu = createMenu({
     audio.start(soundOf(player.spec));
     state = 'driving'; everDriven = true;
     audio.setPaused(false);
-    hud.show(true);
-    hud.banner('SPEEDX', 'flash a racer to race · find a cone for time attack', 4);
+    // The very first drive of a career opens with a scene (game/scenes.js); after that, just a reminder.
+    const story = save.data.career;
+    if (!SANDBOX && !story.introSeen) {
+      story.introSeen = true; save.write();
+      playScene(gameIntro(player, map.info.name, director.caption), resumeDriving);
+    } else {
+      hud.show(true);
+      hud.banner('SPEEDX', 'flash a racer to race · speed cameras and time attacks earn stars', 4);
+    }
   },
   onResume: () => setPaused(false),
   onToggleRain: () => { weather.toggle(); localStorage.setItem('speedx-rain', weather.raining ? 'on' : 'off'); return weather.raining; },
@@ -264,15 +303,26 @@ const menu = createMenu({
     localStorage.setItem('speedx-filter', next.id);
     return next.name;
   },
-  // The garage is opened from the main menu or from the pause menu. Either way the game goes to
-  // its menu state (the camera circles the car) with the garage screen on top.
-  onOpenGarage: () => {
-    if (state !== 'menu') { setPaused(false); state = 'menu'; hud.show(false); audio.setPaused(true); }
-    menu.hideMain();
-    garage.open();
-    enterShowroom();
-  },
+  // The Blacklist can be read anywhere (entry = the driver to show first), but a driver can only be
+  // challenged out on the road. The garage screen opens from the main menu; out on the road, drive into a garage.
+  onOpenBlacklist: (entry) => { menu.hidePause(); menu.hideMain(); hud.show(false); blacklistScreen.open(entry); },
+  onOpenGarage: () => { menu.hideMain(); garage.open(); enterShowroom(); },
+  onMainMenu: () => toMainMenu(),
+  volume: () => audio.volume,
+  onVolume: (level) => audio.setVolume(level),
 });
+// Back to the main menu from the road. Whatever was going on is called off; the car stays where it is,
+// and DRIVE carries on from there.
+function toMainMenu() {
+  abandonActivity();
+  replay.clear();
+  mapView.toggle(false);
+  setPaused(false);
+  state = 'menu';
+  hud.show(false);
+  audio.setPaused(true);
+  menu.showMain();
+}
 
 // ---- The garage's bright room (world/showroom.js) ---------------------------------------------
 // While the garage is open the car stands in the showroom scene and the picture is drawn from there.
@@ -280,16 +330,20 @@ const showroom = createShowroom();
 const revTest = createRevTest();          // the engine being revved in the garage (audio/revTest.js)
 let heardSpec = null;                     // the setup whose engine the sound system is playing in the garage
 let lightsBefore = 1;
-function enterShowroom() {
+// What the picture is drawn from: the world, or a room of its own (the showroom, the Blacklist stage).
+let drawn = scene;
+const draw = (what) => { drawn = what; postfx.setScene(what); };
+function enterShowroom(theme = 'garage') {
   lightsBefore = player.lightMode;
   player.lightMode = 0;                   // lamps off in the bright room (the LIGHTS button switches them on)
+  showroom.theme(theme);
   showroom.show(player.car.group);
-  postfx.setScene(showroom.scene);
+  draw(showroom.scene);
 }
 function leaveShowroom() {
   showroom.hide(scene);
   showroom.release(rig.camera);
-  postfx.setScene(scene);
+  draw(scene);
   player.lightMode = lightsBefore;
   revTest.running = revTest.held = false; revTest.step(0, audio);      // engine off
   audio.setPaused(true);
@@ -329,10 +383,232 @@ const garage = createGarage({
   onSwitchCar: (carId) => { spawnPlayer(carId); player.lightMode = 0; showroom.show(player.car.group); },
   onPaint: paintPlayer,                                        // (also used to show a paint that is only being tried)
   onLook: redressPlayer,                                       // body parts being tried, or put back
-  onApply: () => player.applySetup(setupOf(player.carId)),     // new parts: the same 3D car drives on with the new numbers
+  onApply: () => { player.applySetup(setupOf(player.carId)); rivals.playerChanged(player.spec); },     // new parts: the same 3D car drives on with the new numbers
   onLights: () => { player.lightMode = player.lightMode ? 0 : 1; },
-  onClose: () => { leaveShowroom(); heardSpec = null; menu.showMain(); },
+  onSection: (sectionId) => showroom.focus(sectionId),          // the camera goes to the part of the car being worked on
+  onTravel: () => travelFromGarage(),
+  // Leaving: back to the main menu - or, if the car was driven in through a garage's door, out through it again.
+  onClose: () => {
+    leaveShowroom(); heardSpec = null;
+    if (!garageDoor) { menu.showMain(); return; }
+    const building = garageDoor;
+    garageDoor = null;
+    state = 'driving';
+    audio.start(soundOf(player.spec));                           // (the engine may not be the one that drove in)
+    director.fade(1, 0);
+    playScene(garageOut(building, player, director.fade), resumeDriving);
+  },
 });
+
+// ---- Scenes (render/director.js) and the places they happen at -------------------------------------
+const director = createDirector();
+const stage = createStage();              // the black stage a Blacklist driver's car is unveiled on (world/stage.js)
+let filmLit = false;                      // a scene has asked for the film light (render/replayLook.js): see startBlacklistRace
+let garageDoor = null;                    // the garage the car was driven into (null = the garage screen was opened from a menu)
+// Play a scene out on the road: the HUD goes away, the car is out of the player's hands, and
+// `then` says what happens when it ends (played out or skipped: it is called either way).
+function playScene(shots, then, options = {}) {
+  hud.show(false); hud.setPrompt('', null);
+  director.play(shots, { ...options, onEnd: then });
+}
+// Hand the car back to the player after a scene.
+function resumeDriving() {
+  director.fade(0, 0.5);
+  state = 'driving';
+  hud.show(true);
+  rig.snapTo(player);
+  audio.setPaused(false);
+}
+// One frame of a scene: the director moves the camera (and whatever its shots move); the world
+// around it is lit and heard as usual, but nobody drives.
+function updateScene(dt) {
+  if (input.wasPressed('handbrake') || input.wasPressed('pause') || input.wasPressed('interact')) director.skip();
+  if (!director.playing) return;
+  director.update(dt, rig.camera);
+  if (filmLit) replayLook.follow(rig.camera, player.vehicle);
+  player.interior.group.visible = false;
+  if (drawn !== scene) { smallLights.begin(); smallLights.finish(); return; }       // on the stage: none of the world's lamps
+  updateLights(dt);
+  sky.update(rig.camera, weather.amount, dt);
+  tellWeatherWhereTheRoadIs();
+  weather.update(dt, rig.camera, tmp.set(0, 0, 0));
+  const v = player.vehicle;
+  audio.update({ rpm: v.spec.engine.idle + v.speed * 260, throttle: v.speed > 0.5 ? 0.35 : 0, speed: v.speed, slip: 0, wheelSpin: 0, onGravel: false,
+    wet: weather.soak, rain: weather.amount, inside: false, scrape: 0, horn: false, trauma: 0, engineOff: false, shifting: false, redline: v.spec.engine.redline, rival: null });
+}
+
+// ---- Speed cameras and replays ------------------------------------------------------------------
+// The car has just gone past a speed camera: the flash, the result, and the offer of a replay.
+function showSpeedCamera({ camera, kmh, stars, newStars, reputation, money, newBest }) {
+  postfx.punch(0.4);
+  audio.beep(stars ? 1320 : 660, 0.25, 0.1);
+  const earned = [newStars ? `+${reputation} REPUTATION · +$${money.toLocaleString()}` : '', newBest && !newStars ? 'NEW BEST' : ''].filter(Boolean);
+  hud.banner(`${kmh} KM/H`, [`${camera.name.toUpperCase()} · ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}`, ...earned].join(' · '), 4, stars ? '#57ff9a' : '#ffd166');
+  replay.mark('speed camera', time);
+}
+let replayGate = null;                    // where the finish gate of the last race or time attack stood: { s, way } (a replay shows it again)
+let replayRush = 0;                       // 0..1 how hard the picture streaks in the replay's present shot
+// The finish gate as the game itself needs it right now (a replay borrows the gate, then hands it back).
+function restoreGate() {
+  const race = rivals.race;
+  if (challenge.state === 'running') challenge.showGate(challenge.finishS);
+  else if (race.state === 'racing') challenge.showGate(race.finish.s, race.finish.way);
+  else challenge.hideGate();
+}
+function startReplay() {
+  if (replay.ready.finish && replayGate) challenge.showGate(replayGate.s, replayGate.way);      // the gate that was crossed is part of the film
+  replay.start([...traffic.cars, ...rivals.cars]);
+  replayLook.on(player);
+  hud.show(false);
+  director.bars(true);
+  director.caption('REPLAY', 'space · back to the road');
+}
+function endReplay() {
+  replay.stop();
+  replayLook.off(player);
+  restoreGate();
+  director.bars(false); director.caption('');
+  hud.show(true);
+  rig.snapTo(player);
+}
+// One frame of a replay: the cars are put where they were and filmed; nothing is driven.
+function updateReplay(dt) {
+  const sound = input.wasPressed('handbrake') || input.wasPressed('pause') || input.wasPressed('interact') ? null : replay.step(dt, rig.camera);
+  if (!sound) { endReplay(); return; }
+  replayLook.follow(rig.camera, sound.hero);
+  replayRush = sound.rush;
+  player.interior.group.visible = false;
+  updateLights(dt);
+  sky.update(rig.camera, weather.amount, dt);
+  weather.update(dt, rig.camera, tmp.set(0, 0, 0));
+  audio.update({ rpm: sound.rpm, throttle: sound.throttle, speed: sound.speed, slip: 0, wheelSpin: 0, onGravel: false, wet: weather.soak, rain: weather.amount,
+    inside: false, scrape: 0, horn: false, trauma: 0, engineOff: false, shifting: false, redline: player.vehicle.spec.engine.redline, rival: null });
+}
+
+// The garage, entered through its door: the scene, then the garage screen.
+function enterGarage(building) {
+  abandonActivity();
+  playScene(garageIn(building, player, director.fade), () => {
+    garageDoor = building;
+    state = 'menu'; audio.setPaused(true);
+    garage.open(true);
+    enterShowroom();
+    director.fade(0, 0.5);
+  });
+}
+// From the garage screen's TRAVEL button: straight to the map, to be put down at another stop.
+function travelFromGarage() {
+  leaveShowroom(); heardSpec = null;
+  garageDoor.userData.setDoor(0);
+  garageDoor = null;
+  resumeDriving();
+  mapView.toggle(true); mapView.drawFull(mapInfo());
+}
+
+// The dealership (ui/dealer.js): the scene, then its screen, with the car being looked at in the showroom.
+let forSale = null;                       // that car: a model only (vehicles/carBuilder.js), thrown away when another is looked at
+const dealer = createDealer({
+  onLook: (carId) => {
+    if (forSale) forSale.dispose();
+    scene.add(player.car.group);                                 // (the player's own car waits outside, in the world)
+    const spec = HERO_CARS[carId];
+    forSale = buildCar(spec, spec.colors[0]);
+    forSale.group.position.copy(player.car.group.position);
+    forSale.group.quaternion.copy(player.car.group.quaternion);
+    forSale.setLights({ head: 0 });
+    showroom.show(forSale.group);
+  },
+  onBought: (carId) => { save.data.garage.current = carId; save.write(); },     // the new car is the one to drive away in
+  onClose: () => {
+    if (forSale) { forSale.dispose(); forSale = null; }
+    showroom.show(player.car.group);
+    leaveShowroom();
+    if (save.data.garage.current !== player.carId) spawnPlayer(save.data.garage.current);
+    audio.start(soundOf(player.spec));
+    resumeDriving();
+  },
+});
+function enterDealer(building) {
+  abandonActivity();
+  playScene(dealerIn(building, director.fade), () => {
+    state = 'menu'; audio.setPaused(true);
+    enterShowroom('dealer');
+    dealer.open();
+    director.fade(0, 0.5);
+  });
+}
+// One frame of the dealership screen: the camera round the car on show.
+function updateDealer(dt) {
+  showroom.update(dt, rig.camera, input.mouse);
+  smallLights.begin(); smallLights.finish();
+  if (forSale) forSale.updateLights(dt, rig.camera.position);
+}
+
+// The Blacklist screen (ui/blacklist.js). The driver being looked at has their car on the black stage.
+let onShow = null;                        // that car: a model only (vehicles/carBuilder.js), thrown away when another driver is looked at
+function clearStage() {
+  stage.hide();
+  if (onShow) { onShow.dispose(); onShow = null; }
+  draw(scene);
+}
+const blacklistScreen = createBlacklistScreen({
+  canRace: () => state !== 'menu' && !activities.current && ['none', 'invite'].includes(rivals.race.state),
+  onLook: (entry) => {
+    stage.hide();
+    if (onShow) onShow.dispose();
+    const spec = dressCar(setupCar(HERO_CARS[entry.car], entry.build), entry.look);
+    onShow = buildCar(spec, spec.colors[0]);
+    onShow.group.position.copy(player.car.group.position);
+    onShow.group.quaternion.copy(player.car.group.quaternion);
+    onShow.setLights({ head: 0 });                               // (lamps off: their beams would wash out the words under the car)
+    stage.tint(entry.colour);
+    stage.show(onShow.group);
+    stage.set(0.45, 0.5);                                        // half lit (full lamps glare off the black floor), the outline glowing over it
+    draw(stage.scene);
+  },
+  onChallenge: (entry) => { clearStage(); challengeDriver(entry); },
+  onClose: () => { clearStage(); if (state === 'paused') { hud.show(true); setPaused(true); } else menu.showMain(); },
+});
+// One frame of the Blacklist screen: the camera round the car on the stage.
+function updateBlacklist(dt) {
+  stage.update(dt, rig.camera, input.mouse);
+  smallLights.begin(); smallLights.finish();
+  if (onShow) onShow.updateLights(dt, rig.camera.position);
+}
+// A Blacklist driver is challenged: they come to the player, here and now. First their own
+// introduction (game/blacklistIntros.js), then the start of the race.
+function challengeDriver(entry) {
+  setPaused(false);
+  const info = playerInfo(), boss = rivals.bring(entry, info);
+  if (!rivals.challenge(entry, info)) { hud.popup(rivals.race.message || 'No room to race here', 'info'); return; }
+  // (The race now stands at its countdown, which does not run during a scene.)
+  const rank = career.blacklist.length - career.blacklist.indexOf(entry);
+  director.fade(1, 0.3);
+  playScene(blacklistIntro(entry, rank, boss, player, stage, {
+    toStage: () => { stage.show(boss.car.group); draw(stage.scene); },
+    toRoad: () => { stage.hide(scene); draw(scene); },
+    caption: director.caption, fade: director.fade,
+  }), () => startBlacklistRace(entry, boss));
+}
+// The start of a Blacklist race is fair: a ROLLING START (game/scenes.js) in which the game drives
+// both cars side by side to the line. It cannot be skipped. Where the road ahead is too short for
+// that, the race starts the way a street race does (a rolling 3-2-1, the car in the player's hands).
+function startBlacklistRace(entry, boss) {
+  const way = player.way, dir = playerDirection();
+  if (way.roomAhead(player.s, dir) < 420) { resumeDriving(); return; }
+  // Nobody may be in the way: traffic on the stretch ahead is taken off the road (it comes back further on).
+  for (const ai of traffic.cars) {
+    const ahead = way.ahead(player.s, ai.s) * dir;
+    if (ai.active && ai.way === way && ahead > -20 && ahead < 320) removeAi(ai);
+  }
+  playScene(rollingStart(entry, player, boss, { way, dir, s: player.s }, {
+    caption: director.caption, big: director.big,
+    beep: (pitch) => audio.beep(pitch, 0.15),
+    // Filmed from outside, the two cars are lit as a replay is (render/replayLook.js); behind the wheel, as always.
+    filmLight: (on) => { filmLit = on; if (on) replayLook.on(player); else replayLook.off(player); },
+    world: (dt) => { const me = playerInfo(); traffic.update(dt, me, [me, ...traffic.cars, ...rivals.cars]); },
+  }), () => { resumeDriving(); rivals.go(); }, { skippable: false });
+}
 
 function setPaused(paused) {
   state = paused ? 'paused' : 'driving';
@@ -449,6 +725,12 @@ function updateDriving(dt) {
     }
   });
   challenge.update(dt, mainRoadS());
+  // Speed cameras, and the recording a replay is cut from (game/speedTraps.js, game/replay.js).
+  const caught = traps.update(player, dt);
+  if (caught) showSpeedCamera(caught);
+  replay.record(dt, time, player, aiCars);
+  if (replay.ready && (replay.ready.until ??= time + 12) < time) replay.ready = null;          // the offer stands for twelve seconds
+  if (replay.ready && input.wasPressed('replay')) startReplay();
   updateRaceHud();
   updateInteraction(v);
 
@@ -471,7 +753,7 @@ function updateDriving(dt) {
   // 7. HUD
   const timerInfo = { visible: false, text: '', extra: '' };
   if (challenge.state === 'running') Object.assign(timerInfo, { visible: true, text: formatTime(challenge.clock),
-    extra: `${Math.round(challenge.remaining)} m` + (challenge.best !== null ? `  best ${formatTime(challenge.best)}` : '') });
+    extra: `${Math.round(challenge.remaining)} m` + (challenge.nextTarget ? `  ${'★'.repeat(challenge.nextTarget.stars)} ${formatTime(challenge.nextTarget.time)}` : '') });
   else if (race.state === 'racing') Object.assign(timerInfo, { visible: true, text: formatTime(race.timer),
     extra: `${race.playerProgress >= race.rivalProgress ? 'AHEAD' : 'BEHIND'} ${Math.abs(race.playerProgress - race.rivalProgress).toFixed(0)} m · ${Math.max(0, race.length - race.playerProgress).toFixed(0)} m to go` });
   hud.update(dt, { vehicle: v, lightMode: player.flashing ? 2 : player.lightMode, timer: timerInfo,
@@ -504,6 +786,8 @@ function mapInfo() {
   const gate = challenge.state === 'running' ? map.pointAt(challenge.finishS, 0) : racing ? race.finish.way.pointAt(race.finish.s, 0) : null;
   const route = racing ? race.route : nav.route;
   return { player: player.vehicle, others: [...traffic.cars, ...rivals.cars].filter((ai) => ai.active), challenge: gate,
+    cameras: traps.cameras.map((camera) => ({ x: camera.x, z: camera.z, name: camera.name, stars: traps.record(camera).stars })),
+    stopStars: challenge.starsAt,
     route: route ? net.routeLine(route) : null, routeColor: racing ? '#57ff9a' : '#59d7e6', goal: racing ? null : nav.goal };
 }
 
@@ -514,16 +798,37 @@ function updateRaceHud() {
   if (race.state === 'invite') hud.setPrompt('F', race.rival.style.ask);
   if (race.state === 'countdown') {
     const count = Math.ceil(race.timer);
-    if (count !== lastCountdown) { hud.banner(String(count), `RACE · ${race.rival.spec.name} · ${race.rival.rating}`, 0.9, '#ffd166'); audio.beep(660, 0.15); lastCountdown = count; }
+    if (count !== lastCountdown && count > 0) { hud.banner(String(count), `RACE · ${race.rival.spec.name} · ${race.rival.rating}`, 0.9, '#ffd166'); audio.beep(660, 0.15); lastCountdown = count; }
   }
   if (race.state !== lastRaceState) {
+    // A race is an activity (game/activities.js): it begins with the countdown, is paid out when it is done, and is called off if it just stops.
+    // (A Blacklist race's countdown is a scene, so the first this function sees of it may be 'racing'.)
+    if (race.state === 'countdown' || (race.state === 'racing' && !activities.current)) activities.begin(race.kind, { entry: race.entry, rivalRating: race.rival.rating, playerRating: rateCar(player.spec).rating, length: race.length });
     if (race.state === 'racing') { hud.banner('GO!', `${(race.length / 1000).toFixed(1)} km to the gate`, 1.6, '#57ff9a'); audio.beep(1320, 0.5); challenge.showGate(race.finish.s, race.finish.way); lastCountdown = 0; }
-    if (race.state === 'done') { hud.banner(race.message, race.playerWon ? formatTime(race.timer) : 'flash another racer for a rematch', 4, race.playerWon ? '#57ff9a' : '#ff5148'); challenge.hideGate(); race.message = ''; }
+    if (race.state === 'done') {
+      const paid = activities.finish(race.playerWon) || {};
+      const won = [paid.money ? `+$${paid.money.toLocaleString()}` : '', paid.reputation ? `+${paid.reputation.toLocaleString()} REPUTATION` : '', paid.car ? `THE ${HERO_CARS[paid.car].name} IS YOURS` : ''].filter(Boolean);
+      hud.banner(race.message, race.playerWon ? [formatTime(race.timer), ...won].join(' · ') : 'flash another racer for a rematch', paid.car ? 7 : 4.5, race.playerWon ? '#57ff9a' : '#ff5148');
+      challenge.hideGate(); race.message = '';
+      // The finish can be watched again. (A race is called 10 m before its gate: the moment marked is the car reaching it.)
+      replayGate = { s: race.finish.s, way: race.finish.way };
+      replay.mark('race', time + (race.playerWon ? 10 / Math.max(12, player.vehicle.speed) : 0), race.playerWon);
+    }
+    if (race.state === 'none' && lastRaceState !== 'done' && activities.current?.kind !== 'timeAttack') activities.cancel();
     lastRaceState = race.state;
   }
-  if (challenge.state === 'finished' && challenge.finishedTimer > 6.9) {
-    hud.banner(formatTime(challenge.finalTime), challenge.newBest ? 'NEW BEST' : `best ${formatTime(challenge.best)}` + ` · ${challenge.nearMisses} near misses`, 5, '#57ff9a');
+  // A time attack is an activity too: it keeps races from starting on top of it. Its stars are counted and
+  // paid by challenge.js itself (first time per level, like a speed camera's); here they are shown.
+  if (challenge.state === 'running') activities.begin('timeAttack');
+  else if (activities.current?.kind === 'timeAttack') activities.cancel();
+  if (challenge.result) {
+    const run = challenge.result;
+    challenge.result = null;
+    const earned = run.newStars ? `+${run.reputation} REPUTATION · +$${run.money.toLocaleString()}` : run.newBest ? 'NEW BEST' : `best ${formatTime(run.best)}`;
+    hud.banner(formatTime(run.time), [`TIME ATTACK · ${'★'.repeat(run.stars)}${'☆'.repeat(3 - run.stars)}`, earned, `${challenge.nearMisses} near misses`].join(' · '), 6, run.stars ? '#57ff9a' : '#ffd166');
     audio.beep(1320, 0.5);
+    replayGate = { s: challenge.finishS, way: map.ways[0] };
+    replay.mark('time attack', time, true);                    // the run to the gate can be watched again
   }
 }
 
@@ -533,13 +838,26 @@ function updateInteraction(v) {
   for (const spot of pois.interactables) {
     if (Math.hypot(spot.position.x - v.x, spot.position.z - v.z) < spot.radius && v.speed < 4) found = spot;
   }
-  if (rivals.race.state === 'invite') return;                 // the race prompt has priority
-  if (!found || challenge.state === 'running') { hud.setPrompt('', null); return; }
-  hud.setPrompt('E', found.type === 'fuel' ? 'Refuel' : 'Start time attack (in the direction you are facing)');
+  const race = rivals.race;
+  if (race.state === 'invite') return;                        // a racer is asking: that prompt has priority (updateRaceHud)
+  if (!found || challenge.state === 'running') {
+    // Nothing to press E for. Is there a racer near enough to race? A replay to watch?
+    if (race.inReach && !activities.current) hud.setPrompt('F', `Flash your lights to race the ${race.inReach.spec.name} · ${race.inReach.rating}`);
+    else if (replay.ready) hud.setPrompt('R', 'Watch the replay');
+    else hud.setPrompt('', null);
+    return;
+  }
+  hud.setPrompt('E', { fuel: 'Refuel', garage: 'Enter the garage', dealer: 'Enter the dealership' }[found.type] || 'Start time attack (in the direction you are facing)');
   if (!input.wasPressed('interact')) return;
   if (found.type === 'fuel') { v.fuel = 1; hud.popup('TANK FULL', 'info'); audio.beep(520, 0.25); }
+  else if (found.type === 'garage') enterGarage(found.object);
+  else if (found.type === 'dealer') enterDealer(found.object);
   else if (rivals.race.state === 'none') {
-    if (challenge.start(found.poi, mainRoadS(), playerDirection())) { hud.banner('TIME ATTACK', 'near misses take time off the clock', 2.5, '#ffd166'); audio.beep(880, 0.3); }
+    if (challenge.start(found.poi, mainRoadS(), playerDirection())) {
+      // What the clock must show at the gate for one, two and three stars.
+      hud.banner('TIME ATTACK', challenge.targets.map((seconds, k) => `${'★'.repeat(k + 1)} ${formatTime(seconds)}`).join('   '), 4, '#ffd166');
+      audio.beep(880, 0.3);
+    }
     else hud.popup('Not enough road that way — turn around', 'info');
   }
 }
@@ -609,7 +927,7 @@ function updateLights(dt) {
       const fx = -Math.sin(ai.yaw), fz = -Math.cos(ai.yaw);
       beam.light.position.set(ai.x + fx * (ai.front + 0.2), ai.y + ai.spec.headlights.y, ai.z + fz * (ai.front + 0.2));
       beam.light.target.position.set(ai.x + fx * 30, ai.y + (high ? 0.5 : -0.4), ai.z + fz * 30);
-      beam.light.intensity = damp(beam.light.intensity, ai.beam * (high ? 1000 : 520), 10, dt);
+      beam.light.intensity = damp(beam.light.intensity, ai.beam * (high ? 1000 : 520) * replayLook.beams, 10, dt);
     }
     // Glare: only lamps that point at the camera and are in view count.
     tmp.set(cam.position.x - ai.x, 0, cam.position.z - ai.z);
@@ -656,12 +974,22 @@ function runFrame(dt) {
   if (viewWidth === 0) return;
   dazzlers.length = 0;                      // filled again by updateLights() if the game is running
 
-  if (input.wasPressed('pause') && state !== 'menu') {
+  if (input.wasPressed('pause') && menu.howOpen) menu.closeHow();
+  else if (input.wasPressed('pause') && blacklistScreen.isOpen) document.getElementById('btn-blacklist-back').click();
+  else if (input.wasPressed('pause') && state !== 'menu' && !director.playing && !replay.playing) {
     if (mapView.open) mapView.toggle(false); else setPaused(state === 'driving');
   }
-  if (input.wasPressed('map') && state === 'driving') { mapView.toggle(); if (mapView.open) mapView.drawFull(mapInfo()); }
+  if (input.wasPressed('map') && state === 'driving' && !director.playing && !replay.playing) { mapView.toggle(); if (mapView.open) mapView.drawFull(mapInfo()); }
 
-  if (state === 'driving' && !mapView.open) {
+  if (replay.playing) {
+    updateReplay(dt);                                // the last few seconds again, as television (game/replay.js)
+  } else if (director.playing) {
+    updateScene(dt);                                 // a scene has the camera: nobody drives (render/director.js)
+  } else if (dealer.isOpen) {
+    updateDealer(dt);
+  } else if (blacklistScreen.isOpen) {
+    updateBlacklist(dt);
+  } else if (state === 'driving' && !mapView.open) {
     // After a big crash the world runs in slow motion for a moment.
     slowMo -= dt;
     const simDt = dt * (slowMo > 0 ? 0.28 : 1);
@@ -690,8 +1018,8 @@ function runFrame(dt) {
   updateDrawDistance(rig.camera.position);         // only what is near gets drawn (render/drawDistance.js)
   renderer.shadowMap.needsUpdate = true;
   // Car paint and glass mirror the world around your car (one side of the probe per frame).
-  const inShowroom = state === 'menu' && garage.isOpen;
-  if (player) carProbe.update(tmp.copy(player.car.group.position).setY(player.car.group.position.y + 1.1), [player.car.group], inShowroom ? showroom.scene : scene);
+  const inShowroom = drawn !== scene;              // the picture is of a room of its own: the showroom, or the Blacklist stage
+  if (player) carProbe.update(tmp.copy(player.car.group.position).setY(player.car.group.position.y + 1.1), [player.car.group], drawn);
 
   // Rear-view mirror: a second, tiny render of the scene (every other frame, cockpit only).
   if (player && rig.mode === 'cockpit' && state === 'driving' && frame % 2 === 0) {
@@ -703,7 +1031,12 @@ function runFrame(dt) {
   }
   const cockpit = rig.mode === 'cockpit' && state !== 'menu';
   if (inShowroom) postfx.render(dt, { baseExposure: 1, rain: 0, inside: false, wiper: 0, speed: 0 });      // indoors: no rain on the lens, no glare
-  else postfx.render(dt, { dazzlers, baseExposure: sky.exposure, rain: weather.amount * (cockpit ? 1 : 0.4), inside: cockpit,
+  else if (replay.playing) {
+    // A replay: lit for the camera (render/replayLook.js) - a little brighter, far less dazzle, and the picture streaks as the car goes by.
+    const look = GRAPHICS.replay;
+    postfx.render(dt, { dazzlers: dazzlers.map((source) => ({ ...source, power: source.power * look.glare })), baseExposure: sky.exposure * look.exposure,
+      rain: weather.amount * 0.4, inside: false, wiper: weather.wiper, speed: replayRush });
+  } else postfx.render(dt, { dazzlers, baseExposure: sky.exposure, rain: weather.amount * (cockpit ? 1 : 0.4), inside: cockpit,
     wiper: weather.wiper, speed: state === 'driving' ? rig.speedFactor : 0 });
   input.endFrame();
 }
@@ -745,8 +1078,9 @@ addDevCommands(devConsole, {
   player: () => player, rivals: () => rivals, driving: () => state === 'driving',
   // Another car, there and then: on the road it keeps your place; its engine is the one you hear.
   switchCar: (carId) => { spawnPlayer(carId); if (state === 'driving') audio.start(soundOf(player.spec)); },
+  toMainMenu,
 });
 // speedx.step(120) fast-forwards 120 frames at once (useful when the page is in the background and runs slowly).
 const step = (frames = 60) => { for (let i = 0; i < frames; i++) runFrame(1 / 60); };
-window.speedx = { preview, step, postfx, audio, save, career, devConsole, garage, showroom, buildCar, finishSpec, setOrbit(angle, speed = 0) { menuAngle = angle; orbitSpeed = speed; }, get player() { return player; }, map, net, nav, signals, rig, sky, weather, traffic, get rivals() { return rivals; }, challenge, scene, renderer };  // handy in the browser console
+window.speedx = { preview, step, postfx, audio, save, career, devConsole, garage, showroom, buildCar, finishSpec, setOrbit(angle, speed = 0) { menuAngle = angle; orbitSpeed = speed; }, get player() { return player; }, map, net, nav, signals, pois, director, traps, replay, rig, sky, weather, traffic, get rivals() { return rivals; }, challenge, scene, renderer, stage, menu, activities, blacklistScreen, replayLook, get state() { return state; } };  // handy in the browser console
 tick();

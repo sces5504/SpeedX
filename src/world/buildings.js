@@ -27,13 +27,13 @@ const roughNormal = makeNoiseNormalMap(128, 1.4, 11);
 roughNormal.repeat.set(3, 3);
 // enhanceMaterial() lets car lamps and neon tint these surfaces; the limit stops white walls
 // right under a lamp from burning out.
-const solid = (color, roughness = 0.8, metalness = 0, extra = {}) => enhanceMaterial(new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra }), { limit: 0.45 });
+export const solid = (color, roughness = 0.8, metalness = 0, extra = {}) => enhanceMaterial(new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra }), { limit: 0.45 });
 export const concrete = solid(0x8a8882, 0.92, 0, { normalMap: roughNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
 export const darkMetal = solid(0x26282b, 0.55, 0.6);
-const whitePanel = solid(0xd9d9d5, 0.55, 0.1);
+export const whitePanel = solid(0xd9d9d5, 0.55, 0.1);
 const wallPaint = solid(0x8b857a, 0.9, 0, { normalMap: roughNormal, normalScale: new THREE.Vector2(0.25, 0.25) });
 const safetyYellow = solid(0xd9a514, 0.6);
-const shopGlass = new THREE.MeshStandardMaterial({ color: 0x0b1014, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.28, envMap: carReflection });
+export const shopGlass = new THREE.MeshStandardMaterial({ color: 0x0b1014, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.28, envMap: carReflection });
 
 // ---- Small building blocks ---------------------------------------------------
 export function box(w, h, d, material, x = 0, y = 0, z = 0) {
@@ -42,7 +42,7 @@ export function box(w, h, d, material, x = 0, y = 0, z = 0) {
   mesh.castShadow = true; mesh.receiveShadow = true;
   return mesh;
 }
-function tube(radiusTop, radiusBottom, height, material, x = 0, y = 0, z = 0) {
+export function tube(radiusTop, radiusBottom, height, material, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, 12), material);
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
@@ -58,7 +58,7 @@ function glow(color, size, opacity = 0.8) {
   sprite.scale.setScalar(size);
   return sprite;
 }
-const at = (x, y, z) => new THREE.Vector3(x, y, z);
+export const at = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // ---- Neon: how buildings in this game are lit ------------------------------------------
 // Not with white floodlight but with COLOUR, like a night scene in a film: a brand colour, an
@@ -69,7 +69,7 @@ const at = (x, y, z) => new THREE.Vector3(x, y, z);
 //   and list it under userData.neons so it tints the ground and the cars near it.
 export const NEON = { accent: 0xffb000, light: 0x5cffc4 };     // amber tubes, mint-green light under a roof (the defaults)
 // (Keep neon between about 2 and 3.5: brighter than that and the colour burns out toward white.)
-const WARM = 0xffc27a;                                         // shop down-lights
+export const WARM = 0xffc27a;                                         // shop down-lights
 export function neon(color, w, h, d, x, y, z, brightness = 2.8) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), emissive(color, brightness));
   mesh.position.set(x, y, z);
@@ -81,7 +81,7 @@ export function haze(color, size, x, y, z, opacity = 0.3) {
   return sprite;
 }
 // Apply the brightness dial to the light a finished building throws on its surroundings.
-function dimmed(group) {
+export function dimmed(group) {
   for (const lamp of group.userData.lamps || []) lamp.intensity *= LEVEL;
   for (const neon of group.userData.neons || []) neon.power *= LEVEL;
   return group;
@@ -110,7 +110,7 @@ export function signBoard(text, background, width, height, { doubleSided = false
   return new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
 }
 // Put a sign on a wall that faces the road (-X).
-const facingRoad = (sign, x, y, z) => { sign.position.set(x, y, z); sign.rotation.y = -Math.PI / 2; return sign; };
+export const facingRoad = (sign, x, y, z) => { sign.position.set(x, y, z); sign.rotation.y = -Math.PI / 2; return sign; };
 
 // ---- Gas-station canopy with two pump islands -----------------------------------------
 // brand = the station's colour (red for fuel, green for the mart).
@@ -320,7 +320,8 @@ export function buildBarrier() {
 
 // ---- Traffic cone with a reflective white collar -------------------------------------------
 const coneOrange = solid(0xff5a12, 0.6, 0, { emissive: 0xff5a12, emissiveIntensity: 0.25 });
-const coneCollar = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.4 }), { retro: 2.5 });
+// (retro 0.7: it answers the headlights like a road marking does - at 2.5 the collar burnt out to a white blob)
+const coneCollar = enhanceMaterial(new THREE.MeshStandardMaterial({ color: 0xd9d9d9, roughness: 0.75 }), { retro: 0.7 });
 export function buildCone() {
   const g = new THREE.Group();
   const spin = (points, material) => new THREE.Mesh(new THREE.LatheGeometry(points.map(([x, y]) => new THREE.Vector2(x, y)), 14), material);

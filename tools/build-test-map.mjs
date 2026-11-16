@@ -65,6 +65,8 @@ const map = {
   pois: [
     { id: 'ring-fuel', type: 'gas', name: 'Ring Fuel', s: 380, length: 90, depth: 34 },
     { id: 'east-turnout', type: 'turnout', name: 'East Turnout', s: 2250, length: 80, depth: 20 },
+    { id: 'garage', type: 'garage', name: 'North Garage', s: 930, length: 60, depth: 26 },
+    { id: 'dealer', type: 'dealer', name: 'Ring Motors', s: 2800, length: 70, depth: 30 },
   ],
   scenery: [
     { prop: 'bush', perKm: 380, minScale: 0.7, maxScale: 1.7, maxDist: 60 },
@@ -74,6 +76,12 @@ const map = {
   traffic: { rules: 'two-lane', count: 5, speedLimit: 16.7 },
   ground: 'chaparral',
   signs: 'tw',
+  // Speed cameras: the speeds (km/h) that earn one, two and three stars.
+  speedCameras: [
+    { id: 'avenue', road: 'avenue', s: 900, name: 'Avenue', stars: [110, 150, 190] },
+    { id: 'ring-east', s: 1950, name: 'Ring East', stars: [100, 135, 170] },
+    { id: 'cross', road: 'cross', s: 620, name: 'Cross Street', stars: [80, 110, 140] },
+  ],
   // Traffic lights at the crossroads in the middle and where the avenue meets the ring.
   signalJunctions: [[0, 0], [-HALF_X, 0], [HALF_X, 0]],
   // The main road: the ring.

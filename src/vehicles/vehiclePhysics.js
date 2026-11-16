@@ -13,6 +13,10 @@
 //   * Braking shifts weight to the front tyres, accelerating to the rear.
 //   * Engine torque -> gearbox -> the driven tyres: the rear ones ("drive": "rwd" in car.json,
 //     the default), the front ones ("fwd") or all four ("awd").
+//   * SPACE is the handbrake. Slow, it locks the rear wheels. At speed it starts DRIFT MODE
+//     (steps 4b and 6b; the dials are PHYSICS.drift in config.js): an easy, steerable slide.
+//     Until SPACE is pressed none of that is in play - v.drift is 0 and every line it touches
+//     works out exactly as it did before.
 //
 // Sign conventions: forward speed +, sideways speed + = to the right,
 // steering and yaw rate + = to the LEFT (matches Three.js rotation.y).
@@ -40,6 +44,7 @@ export function createVehicle(spec) {
     vx: 0, vz: 0, yawRate: 0,
     // --- controls after smoothing ---
     steerInput: 0, steerAngle: 0, throttle: 0, brake: 0, handbrake: false,
+    drift: 0,                            // 0 = ordinary driving ... 1 = drift mode (SPACE at speed: see step 4b)
     // --- drivetrain ---
     gear: 1, rpm: spec.engine.idle, shiftTimer: 0, fuel: 1,
     // --- values other systems read (camera, audio, HUD, effects) ---
@@ -66,6 +71,18 @@ export function engineTorque(spec, rpm) {
     }
   }
   return 0;                              // past the red line: fuel cut
+}
+
+// Put the gearbox in the gear a car rolling at its present speed would be in, revs to match.
+// (A scene that hands a moving car back to the player uses this: see playerCar.js, pose.)
+export function pickGear(v) {
+  const spec = v.spec, speed = Math.abs(v.forwardSpeed);
+  const revsIn = (gear) => (speed / spec.wheelRadius) * spec.gears[gear - 1] * spec.finalDrive * PHYSICS.gearing * (60 / (2 * Math.PI));
+  if (v.forwardSpeed < -0.5) return;                        // reversing: leave it alone
+  v.gear = 1;
+  while (v.gear < spec.gears.length && revsIn(v.gear) > spec.engine.redline * 0.8) v.gear++;
+  v.rpm = Math.max(spec.engine.idle, revsIn(v.gear));
+  v.shiftTimer = 0;
 }
 
 /**
@@ -100,14 +117,14 @@ export function stepVehicle(v, controls, dt, ground) {
   // ---- 2. Steering: slower and with less lock at speed, like power steering ---
   const speed = Math.hypot(v.vx, v.vz);
   const cornerG = 10.5 * spec.grip * ground.grip * PHYSICS.gripBoost * (1 + PHYSICS.speedGrip * clamp(speed / 60, 0, 1));   // sideways acceleration the tyres can give
-  const lock = Math.min(MAX_STEER, Math.atan((L * cornerG) / Math.max(1, vLong * vLong)) * 1.15 + 0.14);
+  const steerLock = Math.min(MAX_STEER, Math.atan((L * cornerG) / Math.max(1, vLong * vLong)) * 1.15 + 0.14);
   const steerRate = controls.steer === 0 ? 8 : lerp(7.0, 4.2, clamp(speed / 55, 0, 1));
   v.steerInput = approach(v.steerInput, controls.steer, dt * steerRate);
   // Self-aligning: the front wheels want to point where the car is actually going.
   // This is what lets you catch a slide on a keyboard.
   const travelAngle = speed > 5 ? Math.atan2(vLat, Math.abs(vLong) + 2) : 0;
   const assist = clamp(-travelAngle * 0.55, -0.35, 0.35) * Math.sign(vLong || 1);
-  v.steerAngle = clamp(v.steerInput * lock + assist, -MAX_STEER, MAX_STEER);
+  v.steerAngle = clamp(v.steerInput * steerLock + assist, -MAX_STEER, MAX_STEER);
   const cosS = Math.cos(v.steerAngle), sinS = Math.sin(v.steerAngle);
 
   // ---- 3. Weight on each axle (shifts with acceleration and braking) ----------
@@ -153,7 +170,20 @@ export function stepVehicle(v, controls, dt, ground) {
       else if (v.gear > 1 && wheelRpm * (gears[v.gear - 2] / gears[v.gear - 1]) < spec.engine.redline * (v.throttle > 0.7 ? 0.9 : 0.6)) { v.gear--; v.shiftTimer = spec.shiftTime * 0.6; }
     }
   }
-  if (v.handbrake) driveForce = 0;
+
+  // ---- 4b. The handbrake: a parking brake when slow, DRIFT MODE at speed (PHYSICS.drift) ----------
+  // v.drift runs from 0 (ordinary driving: nothing below changes anything) to 1 (drifting).
+  //   in:   SPACE at speed. The rear tyres lose part of their sideways grip, and the car's rotation
+  //         is tied to the steering (step 7): the tail hangs out as far as you steer, and no further.
+  //   stay: for as long as the car is still sideways - SPACE need not be held, the throttle carries it.
+  //   out:  steer it straight; when the car points where it is going again, the grip comes back.
+  const D = PHYSICS.drift;
+  const bodySlip = speed > 3 ? Math.atan2(vLat, Math.abs(vLong)) : 0;     // angle between where the car points and where it goes (+ = tail out to the left turn)
+  const lock = v.handbrake ? 1 - smoothstep(D.minSpeed * 0.6, D.minSpeed, speed) : 0;       // 1 = slow: the rear wheels simply lock
+  if (v.handbrake && lock < 1 && vLong > 0) v.drift = approach(v.drift, 1, dt * 8);
+  else if (speed < D.minSpeed * 0.6 || vLong <= 0) v.drift = approach(v.drift, 0, dt * 6);
+  else if (!v.handbrake && Math.abs(bodySlip) < D.exitAngle) v.drift = approach(v.drift, 0, dt * 3);
+  if (lock > 0) driveForce *= 1 - lock;
 
   // ---- 5. Front tyres -----------------------------------------------------------
   const latFront = vLat - v.a * v.yawRate;                  // sideways speed at the front axle
@@ -171,7 +201,7 @@ export function stepVehicle(v, controls, dt, ground) {
   // ---- 6. Rear tyres ------------------------------------------------------------
   const latRear = vLat + v.b * v.yawRate;
   let rearLong, rearSide;
-  if (v.handbrake) {
+  if (lock >= 1) {
     // Locked wheels just skid: friction points against the sliding direction.
     const slide = Math.hypot(vLong, latRear), fade = clamp(slide / 0.8, 0, 1);
     const force = gripRear * 0.82 * fade;
@@ -181,7 +211,9 @@ export function stepVehicle(v, controls, dt, ground) {
     v.wheelSpin = 0;
   } else {
     const slipAngleRear = Math.atan2(latRear, Math.max(Math.abs(vLong), 3));
-    const brakeRear = Math.min(brakeTotal * 0.30, gripRear * 0.96);
+    // (held at speed, the handbrake also slows the car a little: it is still a brake)
+    const handDrag = v.handbrake ? (D.handbrakeDrag + lock) * m * G : 0;
+    const brakeRear = Math.min(brakeTotal * 0.30 + handDrag, gripRear * 0.96);
     // Keyboard throttle is all-or-nothing, so ease the power off as the tail steps out.
     // You can still hold a power slide, it just does not instantly spin.
     const slideEase = PHYSICS.keyboardAids ? 1 - SLIDE_EASE * smoothstep(0.14, 0.5, Math.abs(slipAngleRear)) : 1;
@@ -194,6 +226,7 @@ export function stepVehicle(v, controls, dt, ground) {
     const spending = rearLong * vLong > 0 ? 0.42 : 0.12;
     const rearBudget = Math.sqrt(Math.max(0.06, 1 - spending * (rearLong / gripRear) ** 2));
     rearSide = -gripRear * tyreCurve(slipAngleRear) * rearBudget;
+    if (v.drift > 0) rearSide *= 1 - (1 - D.rearGrip) * v.drift;          // drift mode: the tail is let go
     v.slipRear = clamp((Math.abs(slipAngleRear) - 0.11) / 0.2, 0, 1) * clamp(speed / 6, 0, 1);
   }
   v.slipFront = clamp((Math.abs(slipAngleFront) - 0.13) / 0.2, 0, 1) * clamp(speed / 6, 0, 1);
@@ -209,15 +242,34 @@ export function stepVehicle(v, controls, dt, ground) {
   // what the tyres could really do), so it turns in eagerly instead of ploughing straight on.
   if (PHYSICS.steerAssist > 0 && !v.handbrake && speed > 3) {
     const maxYawRate = (cornerG * 1.08) / Math.max(speed, 6);
-    const wantedYawRate = clamp((vLong * Math.tan(v.steerInput * lock)) / L, -maxYawRate, maxYawRate);
+    const wantedYawRate = clamp((vLong * Math.tan(v.steerInput * steerLock)) / L, -maxYawRate, maxYawRate);
     const sliding = clamp(Math.abs(vLat) / (speed * 0.35 + 1), 0, 1);       // back off while drifting
     // Under braking the helper only ever CALMS rotation (it never adds any).
     let help = (wantedYawRate - v.yawRate) * v.yawInertia * 9 * PHYSICS.steerAssist * (1 - sliding);
     if (v.brake > 0.1 && help * v.yawRate > 0) help *= 1 - 0.45 * v.brake;   // still turns in on the brakes, just less eagerly
-    torque += help;
+    torque += help * (1 - v.drift);                                          // (in drift mode the helper below has the car)
+  }
+  // ---- 6b. DRIFT MODE: the steering sets how fast the car rotates ---------------------------------
+  if (v.drift > 0 && speed > 3) {
+    // Full lock = D.turnRate at about 80 km/h; faster than that the car comes round more slowly.
+    // While SPACE is still down it comes round quicker: a tap gives a small angle, a longer hold a big one.
+    let wanted = v.steerInput * D.turnRate * clamp(Math.sqrt(22 / Math.max(speed, 10)), 0.6, 1.3) * (v.handbrake ? D.flick : 1);
+    // No steering: the car turns back to face the way it is going (that is how a drift ends).
+    if (!v.handbrake) wanted -= bodySlip * 2.2 * (1 - Math.abs(v.steerInput));
+    // Sideways enough: past maxAngle it is turned back, however hard you steer. It cannot spin.
+    const over = Math.abs(bodySlip) - D.maxAngle;
+    if (over > 0) wanted -= Math.sign(bodySlip) * Math.min(over * 6, 2.5);
+    torque = torque * (1 - v.drift) + (wanted - v.yawRate) * v.yawInertia * D.hold * v.drift;
   }
 
-  const accLong = forceLong / m, accRight = forceRight / m;
+  let accLong = forceLong / m, accRight = forceRight / m;
+  if (v.drift > 0 && speed > 3 && v.brake < 0.1) {
+    // A slide scrubs speed off. With the throttle down most of that is given back, so a drift can be
+    // held through a whole bend; lift off (or hold SPACE) and the car slows as you would expect.
+    const along = (accLong * vLong + accRight * vLat) / speed;             // acceleration along the direction of travel
+    const back = along < 0 ? -along * D.carry * v.drift * v.throttle * (v.handbrake ? 0.4 : 1) : 0;
+    accLong += (back * vLong) / speed; accRight += (back * vLat) / speed;
+  }
   v.accelLong = lerp(v.accelLong, accLong, Math.min(1, dt * 12));
   v.accelLat = lerp(v.accelLat, accRight, Math.min(1, dt * 12));
 

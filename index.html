@@ -32,17 +32,24 @@
   <!-- Full-screen map (press M) -->
   <div id="map-screen" class="overlay hidden">
     <canvas id="map-canvas"></canvas>
-    <div class="map-caption" id="map-caption">click a circle to travel there &nbsp;—&nbsp; click a road to be shown the way &nbsp;—&nbsp; press M to close</div>
+    <!-- what each sign on the map means (filled in by src/ui/mapView.js from src/ui/mapIcons.js) -->
+    <div class="map-legend" id="map-legend"></div>
+    <div class="map-caption" id="map-caption">click a stop to travel there &nbsp;—&nbsp; click a road to be shown the way &nbsp;—&nbsp; press M to close</div>
   </div>
 
-  <!-- Main menu: cars down the left, maps down the right, the middle left clear so you can see the car.
-       Both lists are filled in by src/ui/menu.js from whatever cars and maps are installed. -->
+  <!-- Main menu: your cars and the Blacklist down the left, maps down the right, the middle left clear so you
+       can see the car. The lists are filled in by src/ui/menu.js from whatever cars and maps are installed. -->
   <div id="menu-main" class="hidden">
     <section class="menu-side">
       <h1>SPEED<span>X</span></h1>
       <p class="tagline"></p>
-      <h2>CAR</h2>
+      <!-- what the player has: money and reputation (src/ui/wallet.js) -->
+      <div id="career-line" class="wallet"></div>
+      <h2>YOUR CARS</h2>
       <div id="car-list" class="side-list"></div>
+      <!-- the drivers to beat (click one: the Blacklist screen) -->
+      <h2>BLACKLIST</h2>
+      <div id="menu-blacklist" class="side-list"></div>
     </section>
     <footer class="menu-foot">
       <div id="car-name"></div>
@@ -50,17 +57,20 @@
       <div id="car-stats" class="stats"></div>
       <div id="car-colors"></div>
       <button id="btn-start" class="primary">DRIVE</button>
-      <button id="btn-open-garage">GARAGE</button>
+      <div class="garage-buttons">
+        <button id="btn-open-garage">GARAGE</button>
+        <button id="btn-open-how">HOW TO PLAY</button>
+      </div>
     </footer>
     <section class="menu-side">
       <h2>MAP</h2>
       <div id="map-list" class="side-list"></div>
       <div class="controls-help">
-        <b>W A S D</b> drive · <b>SPACE</b> handbrake · <b>C</b> camera<br>
+        <b>W A S D</b> drive · <b>SPACE</b> handbrake / drift · <b>C</b> camera<br>
         <b>L</b> lights · <b>F</b> flash high beams · <b>H</b> horn<br>
-        <b>E</b> interact · <b>M</b> map · <b>BACKSPACE</b> reset car<br>
+        <b>E</b> interact · <b>M</b> map · <b>R</b> replay · <b>BACKSPACE</b> reset car<br>
         <b>HOLD LEFT MOUSE</b> look around<br>
-        <b>ESC</b> pause · rain · night · picture filter
+        <b>ESC</b> pause · rain · night · picture filter · audio
       </div>
       <!-- The catalogue of everything in the game: a separate page (catalog.html, src/catalog/) -->
       <a class="library-link" href="catalog.html" target="_blank" rel="noopener">LIBRARY ↗</a>
@@ -73,12 +83,22 @@
   <div id="garage" class="hidden">
     <section class="menu-side">
       <h1>GARAGE</h1>
-      <p class="tagline" id="garage-note"></p>
+      <div id="garage-wallet" class="wallet"></div>
+      <!-- what is being worked on: how the car goes, or how it looks -->
+      <div class="tabs" id="garage-tabs">
+        <button data-tab="performance">PERFORMANCE</button>
+        <button data-tab="appearance">APPEARANCE</button>
+      </div>
       <div id="garage-sections" class="side-list"></div>
       <div class="controls-help"><b>HOLD LEFT MOUSE</b> look round the car · <b>SCROLL</b> closer / further<br><b>W</b> or <b>HOLD TO REV</b> hear the engine</div>
     </section>
     <footer class="menu-foot">
-      <div id="garage-car-name"></div>
+      <!-- the car in the garage; the arrows go through the cars you own -->
+      <div class="car-switch">
+        <button id="btn-garage-prev" class="arrow" title="previous car">◀</button>
+        <div id="garage-car-name"></div>
+        <button id="btn-garage-next" class="arrow" title="next car">▶</button>
+      </div>
       <div id="garage-stats" class="stats"></div>
       <div id="garage-preview" class="preview-note"></div>
       <div class="garage-buttons">
@@ -88,6 +108,7 @@
       <div class="garage-buttons">
         <button id="btn-garage-apply" class="primary">APPLY</button>
         <button id="btn-garage-cancel">CANCEL</button>
+        <button id="btn-garage-travel" class="hidden">TRAVEL</button>
         <button id="btn-garage-back">BACK</button>
       </div>
     </footer>
@@ -95,6 +116,27 @@
       <h2 id="garage-title"></h2>
       <div id="garage-options" class="side-list"></div>
     </section>
+  </div>
+
+  <!-- Dealership: the cars for sale, the one being looked at in the showroom, BUY (src/ui/dealer.js). Same layout as the garage. -->
+  <div id="dealer" class="hidden">
+    <section class="menu-side">
+      <h1>DEALER</h1>
+      <div id="dealer-wallet" class="wallet"></div>
+      <h2>FOR SALE</h2>
+      <div id="dealer-list" class="side-list"></div>
+      <div class="controls-help"><b>HOLD LEFT MOUSE</b> look round the car · <b>SCROLL</b> closer / further</div>
+    </section>
+    <footer class="menu-foot">
+      <div id="dealer-car-name"></div>
+      <div id="dealer-stats" class="stats"></div>
+      <div id="dealer-preview" class="preview-note"></div>
+      <div class="garage-buttons">
+        <button id="btn-dealer-buy" class="primary">BUY</button>
+        <button id="btn-dealer-back">BACK</button>
+      </div>
+    </footer>
+    <section class="menu-side"></section>
   </div>
 
   <!-- Pause menu -->
@@ -105,14 +147,78 @@
       <button id="btn-rain">RAIN: OFF</button>
       <button id="btn-night">NIGHT: DUSK</button>
       <button id="btn-filter">FILTER: OFF</button>
-      <button id="btn-garage">GARAGE</button>
+      <!-- how loud the game is (src/audio/audio.js: setVolume) -->
+      <label class="slider">AUDIO <input type="range" id="volume" min="0" max="100" step="5"> <b id="volume-value">100%</b></label>
+      <button id="btn-blacklist">BLACKLIST</button>
+      <button id="btn-how">HOW TO PLAY</button>
+      <button id="btn-main-menu">MAIN MENU</button>
       <div class="controls-help">
-        <b>W A S D</b> drive · <b>SPACE</b> handbrake · <b>C</b> camera · <b>L</b> lights · <b>F</b> flash<br>
-        <b>H</b> horn · <b>E</b> interact · <b>M</b> map · <b>BACKSPACE</b> reset · <b>hold left mouse</b> look around<br><br>
-        Flash a street racer to start a race. Find an orange cone and press <b>E</b> for a time attack —
-        every near miss takes time off the clock.
+        <b>W A S D</b> drive · <b>SPACE</b> handbrake / drift · <b>C</b> camera · <b>L</b> lights · <b>F</b> flash<br>
+        <b>H</b> horn · <b>E</b> interact · <b>M</b> map · <b>R</b> replay · <b>BACKSPACE</b> reset · <b>hold left mouse</b> look around
       </div>
     </div>
+  </div>
+
+  <!-- How to play: what the game is about, in a few cards (opened from the main menu and the pause menu; src/ui/menu.js) -->
+  <div id="how-to-play" class="overlay hidden">
+    <div class="menu-panel">
+      <h2>HOW TO PLAY</h2>
+      <p class="tagline">earn reputation · climb the blacklist · take their cars</p>
+      <div class="how-grid">
+        <div class="car-card"><small>01</small><h3>STREET RACES</h3>
+          Racers cruise these roads at night. Get close to one and <b>flash your lights (F)</b> — or flash back when one flashes you.
+          Hazards on, 3-2-1, and the first to the <b>green gate</b> wins. Any road will do: the map and the arrows on the road show the shortest way.
+          A win pays <b>money</b> and <b>reputation</b>; a faster rival pays more.</div>
+        <div class="car-card"><small>02</small><h3>THE BLACKLIST</h3>
+          The drivers who run this place. Each one asks for a certain <b>reputation</b> before they will race you.
+          Open the <b>Blacklist</b> from the pause menu to challenge them. Beat a driver for the first time and
+          <b>their car is yours</b>. The goal: number one.</div>
+        <div class="car-card"><small>03</small><h3>ACTIVITIES</h3>
+          <b>Speed cameras</b> — drive past one as fast as you dare.<br>
+          <b>Time attack</b> — stop by the orange cone at any stop and press <b>E</b>: a timed run to a gate. Near misses take time off the clock, crashes add to it.<br>
+          Both give <b>one to three stars</b>. Each star pays once, in reputation and money.</div>
+        <div class="car-card"><small>04</small><h3>GARAGE AND DEALER</h3>
+          Stop in front of a <b>garage</b> door and press <b>E</b>: performance parts, engine swaps, body parts and paint,
+          your other cars, and fast travel. The <b>dealership</b> sells cars. Parts and cars cost money — races and stars earn it.</div>
+        <div class="car-card"><small>05</small><h3>DRIVING</h3>
+          <b>W A S D</b> drive. <b>SPACE</b> is the handbrake: tap it while steering into a bend and the tail steps out —
+          steer the slide with <b>A / D</b>, hold it with the throttle, steer straight to end it.
+          <b>C</b> changes the camera, <b>L</b> the lights, <b>BACKSPACE</b> puts the car back on the road.</div>
+        <div class="car-card"><small>06</small><h3>THE MAP AND REPLAYS</h3>
+          <b>M</b> opens the map: click a stop to travel there, click a road to be shown the way.
+          After a race, a time attack or a speed camera, press <b>R</b> to watch it again as a film.
+          <b>ESC</b> pauses: rain, time of night, picture filter, audio.</div>
+      </div>
+      <button id="btn-how-close">BACK</button>
+    </div>
+  </div>
+
+  <!-- The Blacklist (src/ui/blacklist.js): the drivers down the left, the chosen one's car on the black stage
+       in the middle (src/world/stage.js), what they ask for and what they give down the right. Laid out like the garage. -->
+  <div id="blacklist" class="hidden">
+    <section class="menu-side">
+      <h1>BLACK<span>LIST</span></h1>
+      <div id="blacklist-wallet" class="wallet"></div>
+      <h2>THE DRIVERS</h2>
+      <div id="blacklist-list" class="side-list"></div>
+    </section>
+    <footer class="menu-foot">
+      <div id="blacklist-name"></div>
+      <div id="blacklist-stats" class="stats"></div>
+      <div id="blacklist-note" class="preview-note"></div>
+      <div class="garage-buttons">
+        <button id="btn-blacklist-go" class="primary">CHALLENGE</button>
+        <button id="btn-blacklist-back">BACK</button>
+      </div>
+    </footer>
+    <section class="menu-side">
+      <h2>REPUTATION</h2>
+      <div id="blacklist-rep" class="rep-meter"></div>
+      <h2>THE PRIZE</h2>
+      <div id="blacklist-prize" class="side-list"></div>
+      <h2>THE RACE</h2>
+      <div id="blacklist-race" class="car-card plain"></div>
+    </section>
   </div>
 
   <div id="loading">LOADING…</div>

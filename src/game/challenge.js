@@ -7,10 +7,21 @@
 //              gate ~3 km up the road. Every near miss takes time OFF the
 //              clock; every hard crash adds a penalty. Risk versus reward.
 //
+// A TIME ATTACK IS AN ACTIVITY WITH STARS, like a speed camera (game/speedTraps.js):
+//   * The clock at the gate earns one, two or three stars. The times asked for come from an
+//     AVERAGE SPEED per star (career.json: "timeAttack" -> "kmh"; a map may give its own in
+//     map.json: "timeAttack": { "kmh": [..] }), so they fit whatever the length of the run is.
+//   * For each run (a stop's cone, in one direction) the save file keeps the best time and the
+//     most stars (save.data.career.timeAttacks). A star level reached for the first time pays
+//     reputation and money - once (career.awardStars).
+//   * challenge.result says what the run that just ended gave; main.js shows it.
+//
 // Also owns the glowing finish gate, which races (rivals.js) borrow too.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { GAMEPLAY, ROAD } from '../config.js';
+import { RULES, career } from './career.js';
+import { save } from './save.js';
 
 export function createChallenge(scene, map) {
   // ---- Finish gate: two pillars and a bar of light across the road -----------
@@ -35,21 +46,34 @@ export function createChallenge(scene, map) {
     gate.visible = true;
   }
 
-  const bestKey = (id) => 'speedx-best-' + id;
+  // ---- Records and stars --------------------------------------------------------
+  const records = () => (save.data.career.timeAttacks ??= {});       // "map:stop-up" -> { best (seconds), stars }
+  const keyOf = (id) => `${map.id}:${id}`;
+  const speeds = () => map.info.timeAttack?.kmh || RULES.timeAttack.kmh;      // average km/h for one, two, three stars
+  // The record of a run so far. (A best time from before records lived in the save file is carried over.)
+  function recordOf(id) {
+    const old = parseFloat(localStorage.getItem('speedx-best-' + id));
+    return (records()[keyOf(id)] ??= { best: Number.isFinite(old) ? old : null, stars: 0 });
+  }
+
   const challenge = {
     state: 'idle',            // 'idle' | 'running' | 'finished'
     time: 0, bonus: 0, penalty: 0, nearMisses: 0,
-    startS: 0, finishS: 0, dir: 1, id: '', best: null, finalTime: 0, newBest: false, finishedTimer: 0,
+    startS: 0, finishS: 0, dir: 1, id: '', best: null, finishedTimer: 0,
+    targets: [],              // the clock (seconds) that earns one, two and three stars on this run
+    result: null,             // the run that just ended: { time, stars, newStars, reputation, money, newBest, best } - main.js takes it (and sets it back to null)
     combo: 0, comboTimer: 0,  // near misses in quick succession
     showGate, hideGate() { gate.visible = false; },
+    // The most stars the player has at a stop's cone (the better of its two directions): for the map screen.
+    starsAt: (poi) => Math.max(0, ...['-up', '-down'].map((way) => records()[keyOf(poi.id + way)]?.stars || 0)),
 
     start(poi, playerS, dir) {
       const length = Math.min(GAMEPLAY.challengeLength, map.roomAhead(playerS, dir) - 150);    // (a loop never runs out of road)
       if (length < 800) return false;                       // too close to the end of the road
       const id = poi.id + (dir > 0 ? '-up' : '-down');
-      const saved = parseFloat(localStorage.getItem(bestKey(id)));
       Object.assign(challenge, { state: 'running', time: 0, bonus: 0, penalty: 0, nearMisses: 0, startS: playerS,
-        finishS: map.wrap(playerS + dir * length), progress: 0, lastS: playerS, dir, id, best: Number.isFinite(saved) ? saved : null, length });
+        finishS: map.wrap(playerS + dir * length), progress: 0, lastS: playerS, dir, id, best: recordOf(id).best, length,
+        targets: speeds().map((kmh) => length / (kmh / 3.6)), result: null });
       showGate(challenge.finishS);
       return true;
     },
@@ -58,6 +82,11 @@ export function createChallenge(scene, map) {
     // Clock shown on the HUD: time driven, minus near-miss bonuses, plus crash penalties.
     get clock() { return Math.max(0, challenge.time - challenge.bonus + challenge.penalty); },
     get remaining() { return Math.max(0, challenge.length - challenge.progress); },
+    // The best star still within reach as the clock stands: { stars, time } (null once even one star is gone).
+    get nextTarget() {
+      for (let stars = 3; stars >= 1; stars--) if (challenge.clock <= challenge.targets[stars - 1]) return { stars, time: challenge.targets[stars - 1] };
+      return null;
+    },
 
     crash() { if (challenge.state === 'running') challenge.penalty += GAMEPLAY.crashPenalty; },
 
@@ -71,13 +100,8 @@ export function createChallenge(scene, map) {
         // jumps back to 0 once per lap, so "position now minus start" would be wrong).
         challenge.progress += map.ahead(challenge.lastS, playerS) * challenge.dir;
         challenge.lastS = playerS;
-        if (challenge.progress >= challenge.length) {
-          challenge.finalTime = challenge.clock;
-          challenge.newBest = challenge.best === null || challenge.finalTime < challenge.best;
-          if (challenge.newBest) localStorage.setItem(bestKey(challenge.id), challenge.finalTime.toFixed(3));
-          challenge.state = 'finished'; challenge.finishedTimer = 7;
-          gate.visible = false;
-        } else if (challenge.progress < -150) challenge.cancel();   // drove off the other way
+        if (challenge.progress >= challenge.length) finish();
+        else if (challenge.progress < -150) challenge.cancel();   // drove off the other way
       } else if (challenge.state === 'finished') {
         challenge.finishedTimer -= dt;
         if (challenge.finishedTimer <= 0) challenge.state = 'idle';
@@ -114,5 +138,18 @@ export function createChallenge(scene, map) {
       return found;
     },
   };
+
+  // The gate has been reached: the clock stops, the stars are counted, and anything new is paid and saved.
+  function finish() {
+    const time = challenge.clock, record = recordOf(challenge.id);
+    const stars = challenge.targets.filter((target) => time <= target).length;
+    const newBest = record.best === null || time < record.best;
+    if (newBest) record.best = Number(time.toFixed(3));
+    const won = career.awardStars('timeAttack-' + keyOf(challenge.id), record, stars, RULES.timeAttack);
+    if (!won.newStars) save.write();
+    challenge.result = { time, stars, ...won, newBest, best: record.best };
+    challenge.state = 'finished'; challenge.finishedTimer = 7;
+    gate.visible = false;
+  }
   return challenge;
 }

@@ -227,7 +227,7 @@ export function absorbHit(ai, before, hit, map, time) {
   ai.wobbleSpeed += ai.yawRate;
   ai.way = spot.way; ai.roadIndex = i; ai.s = spot.s; ai.d = spot.d;
   ai.lastHitTime = time;
-  if (hit.speed > 2.5) ai.stun = 3.5;
+  if (hit.speed > 2.5 && ai.kind !== 'rival') ai.stun = 3.5;       // an ordinary driver is shaken: hazards on, slow for a while. A racer just drives on.
 }
 
 // ---- Helpers the brains share ------------------------------------------------------

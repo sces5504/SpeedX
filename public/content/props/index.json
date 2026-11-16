@@ -31,25 +31,63 @@
       }
     },
     "buildings": {
-      "house": { "about": "Narrow Taiwanese townhouse of 2-5 floors with balconies (透天厝); a wide plot becomes a terrace of several." },
-      "shack": { "about": "Single-storey sheet-metal building (鐵皮屋)." },
-      "cafe": { "about": "Shack with warm windows, a string of bulbs and a neon sign (\"sign\": \"咖啡\", \"COFFEE\", \"BAR\")." },
-      "eatery": { "about": "Small restaurant with a tube-lit glass front under a yellow sign." },
-      "seafood": { "about": "Live-seafood restaurant: open tube-lit front, aqua fish tanks, big red sign and a tall sign by the road (活海產)." },
-      "police": { "about": "Police station with its red lamp (派出所)." },
-      "temple": { "about": "Small roadside temple with red lanterns." },
-      "hall": { "about": "Plain public building (activity centre, visitor centre)." },
-      "toilet": { "about": "Public toilet block with one tube light." },
-      "bus-stop": { "about": "Bus shelter with a bench, one tube light and the stop sign." },
-      "power-tower": { "about": "High-voltage lattice pylon, 42 m, with a red light on top." },
-      "surf-base": { "about": "LANDMARK. Zhongjiao Bay surf centre (中角灣衝浪基地): white stepped building with a blue wave mural, its crest a neon tube." },
-      "shrine": { "about": "LANDMARK. The stone sea-wall temple at Caoli (草里水流公廟): red doors, swallowtail ridge with glazed ornaments, lanterns." },
-      "columbarium": { "about": "LANDMARK. White domed memorial hall of the hillside cemetery above Jinshan (after 金寶山日光苑): arcades, three domes, warm wall-wash." },
-      "police-post": { "about": "LANDMARK. Zhongjiao police station (中角派出所): white cubes with blue trim and a small domed tower, red lamp, blue neon along the roofs." },
-      "harbour": { "about": "LANDMARK. Caoli fishing harbour (草里漁港): quay with white railings and a pavilion, breakwater with red and green beacons, five boats under work lamps. Place it with \"at\" on the shoreline." },
-      "median-lamp": { "about": "The two-armed sodium lamp that stands on the median wall of a divided highway. Use with \"roadside\" and \"side\": 0." },
-      "road-lamp": { "about": "Tall road lamp with a sodium-orange head (\"color\" changes it). Put a row of them along a stretch with \"roadside\"." },
-      "utility-pole": { "about": "Concrete utility pole with a cross-arm; some carry a transformer. Use with \"roadside\"." }
+      "house": {
+        "about": "Narrow Taiwanese townhouse of 2-5 floors with balconies (透天厝); a wide plot becomes a terrace of several."
+      },
+      "shack": {
+        "about": "Single-storey sheet-metal building (鐵皮屋)."
+      },
+      "cafe": {
+        "about": "Shack with warm windows, a string of bulbs and a neon sign (\"sign\": \"咖啡\", \"COFFEE\", \"BAR\")."
+      },
+      "eatery": {
+        "about": "Small restaurant with a tube-lit glass front under a yellow sign."
+      },
+      "seafood": {
+        "about": "Live-seafood restaurant: open tube-lit front, aqua fish tanks, big red sign and a tall sign by the road (活海產)."
+      },
+      "police": {
+        "about": "Police station with its red lamp (派出所)."
+      },
+      "temple": {
+        "about": "Small roadside temple with red lanterns."
+      },
+      "hall": {
+        "about": "Plain public building (activity centre, visitor centre)."
+      },
+      "toilet": {
+        "about": "Public toilet block with one tube light."
+      },
+      "bus-stop": {
+        "about": "Bus shelter with a bench, one tube light and the stop sign."
+      },
+      "power-tower": {
+        "about": "High-voltage lattice pylon, 42 m, with a red light on top."
+      },
+      "surf-base": {
+        "about": "LANDMARK. Zhongjiao Bay surf centre (中角灣衝浪基地): white stepped building with a blue wave mural, its crest a neon tube."
+      },
+      "shrine": {
+        "about": "LANDMARK. The stone sea-wall temple at Caoli (草里水流公廟): red doors, swallowtail ridge with glazed ornaments, lanterns."
+      },
+      "columbarium": {
+        "about": "LANDMARK. White domed memorial hall of the hillside cemetery above Jinshan (after 金寶山日光苑): arcades, three domes, warm wall-wash."
+      },
+      "police-post": {
+        "about": "LANDMARK. Zhongjiao police station (中角派出所): white cubes with blue trim and a small domed tower, red lamp, blue neon along the roofs."
+      },
+      "harbour": {
+        "about": "LANDMARK. Caoli fishing harbour (草里漁港): quay with white railings and a pavilion, breakwater with red and green beacons, five boats under work lamps. Place it with \"at\" on the shoreline."
+      },
+      "median-lamp": {
+        "about": "The two-armed sodium lamp that stands on the median wall of a divided highway. Use with \"roadside\" and \"side\": 0."
+      },
+      "road-lamp": {
+        "about": "Tall road lamp with a sodium-orange head (\"color\" changes it). Put a row of them along a stretch with \"roadside\"."
+      },
+      "utility-pole": {
+        "about": "Concrete utility pole with a cross-arm; some carry a transformer. Use with \"roadside\"."
+      }
     },
     "objects": {
       "gas-canopy": {
@@ -100,6 +138,15 @@
       },
       "cone": {
         "about": "Traffic cone with a reflective collar."
+      },
+      "garage": {
+        "about": "The garage building: sheet-metal shed, gable roof, three roller doors with red lamps, 10 x 15 m."
+      },
+      "dealership": {
+        "about": "The dealership building: flat roof with a cyan neon edge, glass showroom, neon sign, 12 x 24 m."
+      },
+      "speed-camera": {
+        "about": "Speed camera: a pole with a camera box and a flash."
       }
     },
     "grounds": {
@@ -148,13 +195,36 @@
           "time-attack",
           "parking"
         ]
+      },
+      "garage": {
+        "about": "Garage: a sheet-metal shed with three roller doors (the right-hand one opens: the way in), lamps, room for racers' cars. Change parts, change car.",
+        "does": [
+          "travel",
+          "garage",
+          "time-attack",
+          "parking"
+        ]
+      },
+      "dealer": {
+        "about": "Dealership: a glass-fronted showroom with a car in the window and cars for sale on the forecourt. Buy cars.",
+        "options": [
+          "sign"
+        ],
+        "does": [
+          "travel",
+          "dealer",
+          "time-attack",
+          "parking"
+        ]
       }
     },
     "does": {
       "travel": "Fast-travel point: open the map (M) and click it to be put there.",
       "fuel": "Press E under the canopy to fill the tank.",
       "time-attack": "Press E at the cone to start a timed run in the direction you are facing.",
-      "parking": "Parked cars stand here; they are solid."
+      "parking": "Parked cars stand here; they are solid.",
+      "garage": "press E in front of the open door to go in: change parts, change car",
+      "dealer": "press E at the entrance to go in: buy cars"
     },
     "traffic": {
       "two-lane": {

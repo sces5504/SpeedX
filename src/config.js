@@ -58,8 +58,16 @@ export const GRAPHICS = {
   contrast: 0.32,         // 0 = flat, 1 = very punchy
   lensDistortion: 0.13,   // wide-angle barrel distortion
   grain: 0.05,
+  // --- replays only (render/replayLook.js): lit like a night shoot, so the car has shape and nothing burns white ---
+  replay: {
+    fill: 0.5,            // soft cool light from the whole sky
+    key: 55,              // the gentle lamp that stays near the camera
+    beams: 0.3,           // headlight beams, as a share of their driving brightness (a wet road throws them straight back at a low camera)
+    exposure: 1.1,        // the whole picture, a touch brighter
+    glare: 0.35,          // how much of the usual dazzle from oncoming lamps is left
+  },
   // --- the world ---
-  dampRoad: 0.4,          // the asphalt always looks a little damp, like a film set, so lights reflect in it
+  dampRoad: 0.4,         // the asphalt always looks a little damp, like a film set, so lights reflect in it
                           // (looks only: grip is not affected). 0 = bone dry unless it rains
   mist: 0.2,              // how visible light beams are in dry air (rain adds more)
   realLamps: 8,           // how many street lamps and shop lights near you are REAL lights at once (each one costs a little speed)
@@ -102,8 +110,8 @@ export const FIRST_TIME = {
 };
 
 export const GAMEPLAY = {
-  freeParts: true,         // TEST GARAGE: every car and every part that fits can be had for nothing.
-                           // false = the garage asks the shop rules (prices, what is unlocked) once those exist
+  freeParts: false,        // true = a new visitor starts in the SANDBOX (every car and part for nothing) instead of
+                           // the career. Either way the developer console's "sandbox on / off" switches (game/save.js).
   trafficCount: 5,         // ordinary cars alive around the player
   rivalCount: 3,           // illegal racers cruising the road
   // How every street racer drives in a race (ai/rivals.js). None of them holds back: these are the
@@ -119,14 +127,14 @@ export const GAMEPLAY = {
   },
   spawnDistance: 420,      // traffic appears this far away (out of headlight range)
   despawnDistance: 650,
-  speedLimit: 22,          // 22 m/s ≈ 50 mph, what normal traffic drives
+  speedLimit: 22,          // 22 m/s ≈ 80 km/h, what normal traffic drives
   nearMissGap: 1.3,        // side gap (m) that counts as a near miss
   nearMissMinSpeed: 16,    // you must be going at least this fast (m/s)
   nearMissBonus: 0.25,     // seconds removed from the clock
   nearMissOncomingBonus: 0.5,
   crashPenalty: 1.0,       // seconds added for a hard hit during a challenge
   idleShutOff: 3,          // seconds standing still before the engine switches off
-  knockoutSpeed: 17,       // m/s (~38 mph) INTO an obstacle before the black-and-white slow-motion crash plays
+  knockoutSpeed: 17,       // m/s (~60 km/h) INTO an obstacle before the black-and-white slow-motion crash plays
   raceLength: 2400,        // metres for a race against a rival
   challengeLength: 3000,   // metres for a time-attack run
 };
@@ -146,6 +154,21 @@ export const PHYSICS = {
   dryGrip: 1.0,
   wetGrip: 1.0,            // tyre grip in rain. Same as dryGrip: rain changes how the game looks and sounds, NOT how the car drives (lower it, e.g. 0.72, for a slippery wet road)
   gravelGrip: 0.62,        // off the asphalt
+  // --- DRIFT MODE: what SPACE (the handbrake) does at speed (vehicles/vehiclePhysics.js, step 6b) ---
+  // Tap or hold SPACE while steering and the tail steps out into a slide you steer with A / D and
+  // keep going with the throttle; steer straight (or the other way) and it gathers itself up again.
+  // None of this is used until SPACE is pressed: ordinary driving does not go through it at all.
+  drift: {
+    minSpeed: 9,           // m/s (~32 km/h). Slower than this SPACE is a plain handbrake: locked rear wheels
+    rearGrip: 0.45,        // share of their sideways grip the rear tyres keep in a drift (lower = the tail swings wider)
+    turnRate: 1.2,         // how fast the car rotates at full steering lock, radians per second at ~80 km/h (less the faster you go)
+    flick: 1.5,            // ...times this while SPACE is still held down (the tail is thrown out faster)
+    hold: 9,               // how firmly the car's rotation follows the steering (higher = more exact, less "floaty")
+    maxAngle: 0.56,        // radians (it settles a little above this, at about 35-40 degrees): the widest the tail hangs out before the car is turned back - it will not spin
+    carry: 0.6,            // share of the speed a slide would scrub off that is given back while the throttle is down
+    handbrakeDrag: 0.25,   // g of braking while SPACE itself is held (letting go keeps the drift, without the braking)
+    exitAngle: 0.1,        // radians: once the car is this straight again (and SPACE is up), drift mode ends
+  },
 };
 
 export const KEYS = {
@@ -163,6 +186,7 @@ export const KEYS = {
   interact: ['KeyE'],
   reset: ['Backspace'],    // put the car back on the road
   console: ['Backquote'],  // ~ : the developer console (ui/devConsole.js)
+  replay: ['KeyR'],        // watch the replay that has just been offered (game/replay.js)
 };
 
-export const MPH = 2.23694; // metres per second -> miles per hour
+export const KMH = 3.6;     // metres per second -> kilometres per hour (every speed the player sees is in km/h)

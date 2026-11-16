@@ -31,6 +31,7 @@ import { getProp, makeProp } from './props.js';
 import { PLANTS } from './plants.js';
 import { BUILDING_KINDS, buildOne } from './town.js';
 import { buildBarrier, buildCanopy, buildCone, buildInfoBoard, buildPylon, buildStore, buildStreetLamp, buildVendingMachine } from './buildings.js';
+import { buildDealership, buildGarage, buildSpeedCamera } from './careerBuildings.js';
 
 const hex = (color) => new THREE.Color(color).getHex();
 // The neon colours a map may set on a building, passed on only if given (otherwise the building's own defaults).
@@ -48,6 +49,10 @@ export const OBJECTS = {
   'info-board': ({ name = 'VISTA POINT' } = {}) => buildInfoBoard(name),                               // wooden sign for a turnout
   'barrier': () => buildBarrier(),                                                                      // concrete, 2.8 m long
   'cone': () => buildCone(),
+  // The career's buildings (careerBuildings.js):
+  'garage': () => buildGarage(),                                                                        // sheet-metal shed, three roller doors (one opens: the way in), 10 x 15 m
+  'dealership': ({ name = 'DEALERSHIP' } = {}) => buildDealership(name),                               // glass-fronted car showroom under a flat roof, 12 x 24 m
+  'speed-camera': () => buildSpeedCamera(),                                                             // a pole with a camera and a flash
 };
 
 // Every kind of town building, landmark and street furniture (town.js) is an object of the library

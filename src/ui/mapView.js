@@ -1,10 +1,14 @@
 // ---------------------------------------------------------------------------
 // mapView.js — draws the road as a 2D map: a small round minimap that follows
-// you, and a full-screen map (press M) of the whole highway. On the full map
-// the coloured circles are places: click one to travel there.
+// you, and a full-screen map (press M) of the whole highway. Every place has
+// its own sign (ui/mapIcons.js): fuel, rest stop, turnout, garage, dealership,
+// speed camera. On the full map click a stop to travel there; under each stop and
+// camera are the stars the player has there (a stop's are its time attack's).
 // Also: the little route pictures on the map cards of the main menu.
 // ---------------------------------------------------------------------------
-const POI_COLORS = { gas: '#ff5a4a', mart: '#3ad68a', turnout: '#ffd166' };
+import { MAP_ICONS, drawMapIcon } from './mapIcons.js';
+
+const stars = (count) => '★'.repeat(count) + '☆'.repeat(3 - count);
 
 // How long a road is, from its list of [x, z] points (metres).
 // closed = the road is a loop, so the piece from the last point back to the first counts too.
@@ -45,7 +49,7 @@ export function drawRoutePreview(canvas, info) {
       left -= step;
     }
     const [x, y] = toScreen(at);
-    ctx.fillStyle = POI_COLORS[poi.type] || '#ffffff'; ctx.beginPath(); ctx.arc(x, y, 4 * devicePixelRatio, 0, 7); ctx.fill();
+    ctx.fillStyle = MAP_ICONS[poi.type]?.color || '#ffffff'; ctx.beginPath(); ctx.arc(x, y, 4 * devicePixelRatio, 0, 7); ctx.fill();
   }
 }
 
@@ -56,8 +60,20 @@ export function createMapView(map, onPickPoi, onPickPlace) {
   const full = document.getElementById('map-canvas'), fullCtx = full.getContext('2d');
   const screen = document.getElementById('map-screen');
 
+  // The legend under the full map: every sign and what it means.
+  const legend = document.getElementById('map-legend');
+  for (const [kind, icon] of Object.entries(MAP_ICONS)) {
+    if (kind === 'timeAttack') continue;                       // (every stop has a time attack: its stars are under the stop)
+    const item = document.createElement('span'), picture = document.createElement('canvas');
+    picture.width = picture.height = 44;
+    drawMapIcon(picture.getContext('2d'), kind, 22, 22, 40);
+    item.append(picture, icon.label);
+    legend.append(item);
+  }
+
   // Shared drawing routine. `toScreen` converts world (x, z) to canvas pixels.
-  function draw(ctx, toScreen, { player, others, challenge, labels, stride, route, routeColor, goal }) {
+  // cameras: [{ x, z, name, stars }], stopStars(poi) -> the stars of that stop's time attack.
+  function draw(ctx, toScreen, { player, others, challenge, labels, stride, route, routeColor, goal, cameras = [], stopStars = () => 0 }) {
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (const [color, width] of [['rgba(0,0,0,0.8)', labels ? 7 : 6], ['#cfd8d2', labels ? 3 : 3.2]]) {
       ctx.strokeStyle = color; ctx.lineWidth = width;
@@ -84,11 +100,22 @@ export function createMapView(map, onPickPoi, onPickPlace) {
       const [x, y] = toScreen(goal.x, goal.z);
       ctx.fillStyle = routeColor; ctx.beginPath(); ctx.arc(x, y, labels ? 8 : 5, 0, 7); ctx.fill();
     }
+    // Places: each with its own sign; on the full map also its name and the stars the player has there.
+    const pixel = labels ? devicePixelRatio : 1;
+    const caption = (x, y, name, count, color) => {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#e8f2ea'; ctx.font = `${13 * pixel}px Menlo, monospace`; ctx.fillText(name, x + 20 * pixel, y - 1 * pixel);
+      ctx.fillStyle = color; ctx.font = `${11 * pixel}px Menlo, monospace`; ctx.fillText(stars(count), x + 20 * pixel, y + 13 * pixel);
+    };
+    for (const camera of cameras) {
+      const [x, y] = toScreen(camera.x, camera.z);
+      drawMapIcon(ctx, 'camera', x, y, labels ? 24 * pixel : 13);
+      if (labels) caption(x, y, camera.name, camera.stars, MAP_ICONS.camera.color);
+    }
     for (const poi of map.pois) {
       const [x, y] = toScreen(road.x[poi.index], road.z[poi.index]);
-      ctx.fillStyle = POI_COLORS[poi.type] || '#ffffff'; ctx.beginPath(); ctx.arc(x, y, labels ? 9 * devicePixelRatio : 5, 0, 7); ctx.fill();
-      if (labels) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 14 * devicePixelRatio, 0, 7); ctx.stroke(); }
-      if (labels) { ctx.fillStyle = '#e8f2ea'; ctx.font = `${13 * devicePixelRatio}px Menlo, monospace`; ctx.fillText(poi.name, x + 20 * devicePixelRatio, y + 4); }
+      drawMapIcon(ctx, poi.type, x, y, labels ? 30 * pixel : 16);
+      if (labels) caption(x, y, poi.name, stopStars(poi), MAP_ICONS.timeAttack.color);
     }
     if (challenge) {
       const [x, y] = toScreen(challenge.x, challenge.z);

@@ -7,11 +7,11 @@
 // below. The function gets the typed words and returns the text to print.
 // `game` is the handful of things main.js lends this file (see where it is called).
 // ---------------------------------------------------------------------------
-import { MPH } from '../config.js';
+import { KMH } from '../config.js';
 import { HERO_CARS } from '../vehicles/carSpecs.js';
 import { NIGHT_PRESETS } from '../world/sky.js';
 import { career } from './career.js';
-import { save } from './save.js';
+import { save, SANDBOX } from './save.js';
 
 export function addDevCommands(devConsole, game) {
   const add = devConsole.add;
@@ -60,13 +60,14 @@ export function addDevCommands(devConsole, game) {
   add('pos', '', 'where the car is', () => {
     mustBeDriving();
     const p = game.player(), v = p.vehicle;
-    return `road ${p.way.id}   s ${p.s.toFixed(0)} m   d ${p.d.toFixed(1)} m   x ${v.x.toFixed(0)}  z ${v.z.toFixed(0)}   ${Math.round(v.speed * MPH)} mph`;
+    return `road ${p.way.id}   s ${p.s.toFixed(0)} m   d ${p.d.toFixed(1)} m   x ${v.x.toFixed(0)}  z ${v.z.toFixed(0)}   ${Math.round(v.speed * KMH)} km/h`;
   });
 
   // ---- The car -------------------------------------------------------------------
   add('car', '<id>', 'drive another car now; car alone lists them', ([id]) => {
     if (!id) return Object.keys(HERO_CARS).join('   ');
     if (!HERO_CARS[id]) throw new Error(`No car "${id}". Try: ${Object.keys(HERO_CARS).join(', ')}`);
+    if (!career.owns(id)) career.giveCar(id);                    // (a developer's shortcut: it is simply yours now)
     save.data.garage.current = id; save.write();
     game.switchCar(id);
     return `Driving ${HERO_CARS[id].name}.`;
@@ -93,6 +94,30 @@ export function addDevCommands(devConsole, game) {
     mustBeDriving();
     const rivals = game.rivals();
     return rivals.raceNow(game.playerInfo()) ? 'Countdown started.' : rivals.race.message || 'No racer could start a race here (one may be running already).';
+  });
+
+  // ---- The career -------------------------------------------------------------------
+  add('blacklist', '<name>', 'be challenged by a Blacklist driver right now, whatever your reputation; blacklist alone lists them', ([name]) => {
+    const entry = career.blacklist.find((e) => e.id === (name || '').toLowerCase());
+    if (!entry) return career.blacklist.map((e) => `${e.id}: ${e.name}, asks for ${e.reputation} reputation${career.hasBeaten(e) ? ' (beaten)' : ''}`).join('\n');
+    mustBeDriving();
+    return game.rivals().challenge(entry, game.playerInfo()) ? `${entry.name} is behind you. Countdown started.` : game.rivals().race.message || 'No race could start here.';
+  });
+  add('win', '', 'win the race you are in, now', () => {
+    return game.rivals().winNow() ? 'You win.' : 'You are not in a race (wait for GO).';
+  });
+  add('intro', '', 'be a first-time player again: back to the main menu, and DRIVE plays the opening scene once more', () => {
+    if (SANDBOX) return 'The opening scene belongs to the career. Type  sandbox off  first.';
+    save.data.career.introSeen = false;
+    save.write();
+    if (game.driving()) game.toMainMenu();
+    return 'Done. Press DRIVE: the opening scene plays again.';
+  });
+  add('sandbox', '<on | off>', 'switch between the career and the sandbox (every car and part free; its own save), then reload', ([wanted]) => {
+    if (wanted !== 'on' && wanted !== 'off') return `You are in the ${SANDBOX ? 'sandbox' : 'career'}. Type  sandbox on  or  sandbox off.`;
+    localStorage.setItem('speedx-sandbox', wanted);
+    location.reload();
+    return 'Reloading...';
   });
 
   // ---- The save file -----------------------------------------------------------------

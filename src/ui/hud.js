@@ -3,7 +3,7 @@
 // messages, big banners and the "press E" prompt.
 // It only DISPLAYS things; all game rules live elsewhere.
 // ---------------------------------------------------------------------------
-import { MPH } from '../config.js';
+import { KMH } from '../config.js';
 import { formatTime } from '../core/mathUtils.js';
 
 const $ = (id) => document.getElementById(id);
@@ -51,8 +51,8 @@ export function createHud() {
     // speed
     g.fillStyle = '#57ff9a'; g.textAlign = 'center';
     g.font = 'italic bold 52px "Helvetica Neue", Arial';
-    g.fillText(String(Math.round(Math.abs(speed) * MPH)), cx + 14, cy + 30);
-    g.font = '11px Menlo, monospace'; g.fillText('mph', cx + 14, cy + 48);
+    g.fillText(String(Math.round(Math.abs(speed) * KMH)), cx + 14, cy + 30);
+    g.font = '11px Menlo, monospace'; g.fillText('km/h', cx + 14, cy + 48);
     // gear ring
     g.strokeStyle = '#e8f2ea'; g.lineWidth = 2;
     g.beginPath(); g.arc(70, 34, 22, 0, Math.PI * 2); g.stroke();

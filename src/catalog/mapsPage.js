@@ -12,7 +12,7 @@
 // stops, scenery, single objects, traffic, ground, city lights.
 // ---------------------------------------------------------------------------
 import { loadMap } from '../world/mapData.js';
-import { GAMEPLAY, MPH, ROAD } from '../config.js';
+import { GAMEPLAY, KMH, ROAD } from '../config.js';
 import { add, badge, card, el, facts, fmt, svg } from './dom.js';
 import { linePath, niceStep, plot } from './charts.js';
 import { DEFAULT_RULES, DOES_NAMES } from './placesPage.js';
@@ -79,7 +79,7 @@ function roadStats(map) {
 }
 
 const km = (metres, digits = 2) => `${fmt(metres / 1000, digits)} km`;
-const kmh = (metresPerSecond) => `${fmt(metresPerSecond * 3.6, 0)} km/h（${fmt(metresPerSecond * MPH, 0)} mph）`;
+const kmh = (metresPerSecond) => `${fmt(metresPerSecond * KMH, 0)} km/h`;
 
 function describeMap(map, page) {
   const { info, road } = map, stats = roadStats(map), sea = stats.startElevation;

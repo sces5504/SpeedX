@@ -162,12 +162,49 @@ for (const id of mapIndex?.maps || []) {
     if (!builtIn.buildings?.[building.kind]) bad(id, `building kind "${building.kind}" is not in props/index.json`);
     if (!Array.isArray(building.at) && !isNumber(building.s)) bad(id, `a "${building.kind}" building needs "at": [x, z] or "s" (metres along the road)`);
   }
+  for (const camera of map.speedCameras || []) {
+    if (!camera.id || !isNumber(camera.s) || !Array.isArray(camera.stars) || camera.stars.length !== 3) bad(id, `a speed camera needs "id", "s" and "stars": [km/h for one, two and three stars] (found "${camera.id}")`);
+    if (camera.road && !roadIds.has(camera.road)) bad(id, `speed camera "${camera.id}": there is no road "${camera.road}"`);
+  }
+  if (map.timeAttack && !(Array.isArray(map.timeAttack.kmh) && map.timeAttack.kmh.length === 3 && map.timeAttack.kmh.every(isNumber))) bad(id, '"timeAttack" needs "kmh": [average km/h for one, two and three stars]');
   for (const point of map.signalJunctions || []) if (!Array.isArray(point) || point.length !== 2) bad(id, '"signalJunctions" is a list of [x, z] points, one at each junction with traffic lights');
   if (map.ground && !builtIn.grounds?.[map.ground]) bad(id, `ground "${map.ground}" is not in props/index.json`);
   if (map.traffic?.rules && !builtIn.traffic?.[map.traffic.rules]) bad(id, `traffic rules "${map.traffic.rules}" are not in props/index.json`);
   console.log(`map ${id}: ${(length / 1000).toFixed(1)} km${map.loop ? ' loop' : ''}, ${(map.pois || []).length} pois`);
 }
 for (const [id] of Object.entries(props)) if (!fs.existsSync(`public/content/props/${id}/model.glb`)) bad('props/' + id, 'model.glb not found');
+
+// ---- The career (prices, rewards, the Blacklist) ---------------------------------------------
+const careerRules = readJson('public/content/career.json');
+if (careerRules) {
+  const heroIds = (carIndex?.cars || []).filter((id) => readJson(`public/content/cars/${id}/car.json`)?.engine);
+  if (!heroIds.includes(careerRules.start?.car)) bad('career.json', `"start.car" must be a hero car (found "${careerRules.start?.car}")`);
+  for (const id of Object.keys(careerRules.cars || {})) if (!heroIds.includes(id)) bad('career.json', `"cars" lists "${id}", which is not a hero car`);
+  for (const id of heroIds) if (!careerRules.cars?.[id]) bad('career.json', `"cars" has no entry for "${id}" (give it a price, or {} if it is never for sale)`);
+  for (const [group, price] of Object.entries(careerRules.parts || {})) if (!(isNumber(price) || (Array.isArray(price) && price.every(isNumber)))) bad('career.json', `"parts.${group}" must be a price or a list of prices`);
+  // Activities with stars: three numbers each (one, two, three stars).
+  const three = (list) => Array.isArray(list) && list.length === 3 && list.every(isNumber);
+  for (const kind of ['speedCamera', 'timeAttack']) {
+    if (!three(careerRules[kind]?.reputation) || !three(careerRules[kind]?.money)) bad('career.json', `"${kind}" needs "reputation" and "money": three numbers each, for one, two and three stars`);
+  }
+  if (!three(careerRules.timeAttack?.kmh)) bad('career.json', '"timeAttack.kmh" must be three average speeds, for one, two and three stars');
+  // Every Blacklist driver has an introduction of their own (src/game/blacklistIntros.js: INTROS).
+  const intros = [...(fs.readFileSync('src/game/blacklistIntros.js', 'utf8').split('export const INTROS')[1] || '').matchAll(/^  (\w+)\(\{/gm)].map((found) => found[1]);
+  const introUsed = new Set();
+  const seen = new Set();
+  for (const entry of careerRules.blacklist || []) {
+    if (!intros.includes(entry.intro)) bad('career.json', `Blacklist driver "${entry.id}": intro "${entry.intro}" is not one of ${intros.join(', ')} (src/game/blacklistIntros.js)`);
+    if (introUsed.has(entry.intro)) bad('career.json', `Blacklist driver "${entry.id}" has the same intro ("${entry.intro}") as another driver: every driver gets their own`);
+    introUsed.add(entry.intro);
+    if (entry.colour && !/^#[0-9a-f]{6}$/i.test(entry.colour)) bad('career.json', `Blacklist driver "${entry.id}": "colour" must look like "#59d7e6"`);
+    if (!isNumber(entry.prize?.reputation)) bad('career.json', `Blacklist driver "${entry.id}" needs "prize.reputation" as a number`);
+    if (!entry.id || seen.has(entry.id)) bad('career.json', `every Blacklist driver needs an "id" of their own (found "${entry.id}")`);
+    seen.add(entry.id);
+    if (!heroIds.includes(entry.car)) bad('career.json', `Blacklist driver "${entry.id}": car "${entry.car}" is not a hero car`);
+    if (careerRules.cars?.[entry.car]?.price) bad('career.json', `Blacklist driver "${entry.id}" drives "${entry.car}", which is also for sale: a prize car has no price`);
+    if (!isNumber(entry.reputation) || !isNumber(entry.raceLength) || !isNumber(entry.prize?.money)) bad('career.json', `Blacklist driver "${entry.id}" needs "reputation", "raceLength" and "prize.money" as numbers`);
+  }
+}
 
 console.log(`cars: ${carIndex?.cars.length || 0}, engines: ${Object.keys(engines).length}, maps: ${mapIndex?.maps.length || 0}, props: ${Object.keys(props).length}`);
 if (problems.length) { console.error('\n' + problems.map((p) => 'PROBLEM  ' + p).join('\n')); process.exit(1); }

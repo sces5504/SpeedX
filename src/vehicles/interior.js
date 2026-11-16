@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { canvasTexture, enhanceMaterial } from '../render/materials.js';
 import { claimResources } from './carResources.js';
-import { MPH } from '../config.js';
+import { KMH } from '../config.js';
 
 const UP = new THREE.Vector3(0, 1, 0), scratch = new THREE.Vector3();
 // The cabin is in the shade of its own roof, but the game's lights do not know that (only one
@@ -337,7 +337,7 @@ export function buildInterior(car, mirrorTexture) {
     update(vehicle, wiperCycle = 0, dt = 1 / 60) {
       glow.intensity = group.visible ? 0.05 : 0;
       const rpmFraction = (vehicle.engineOff ? 0 : vehicle.rpm) / (maxRpm * 1000);
-      const speedFraction = Math.min(1, (vehicle.speed * MPH) / 160);
+      const speedFraction = Math.min(1, (vehicle.speed * KMH) / 280);
       tachNeedle.rotation.z = 2.1 - rpmFraction * 4.2;         // sweep from lower-left to lower-right
       speedNeedle.rotation.z = 2.1 - speedFraction * 4.2;
       // The wheel follows the steering smoothly (keyboard steering is all-or-nothing; real hands are not).
@@ -381,6 +381,6 @@ function dialTexture(spec, maxRpm) {
       g.fillStyle = spec.gaugeColor; g.font = '12px Arial'; g.fillText(label, cx, cy + 40);
     };
     dial(w / 2 - 123, maxRpm, 1, 'x1000 r/min', spec.engine.redline / 1000);
-    dial(w / 2 + 123, 160, 20, 'mph');
+    dial(w / 2 + 123, 280, 40, 'km/h');
   }, { repeat: false });
 }
