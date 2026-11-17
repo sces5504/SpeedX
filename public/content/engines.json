@@ -136,6 +136,12 @@
       "torque": [[1000, 450], [2000, 520], [3800, 570], [5200, 533], [6000, 440]],
       "sound": "v12smooth", "mass": 300, "fits": ["turbo", "supercharger"]
     },
+    "kg-v8-51tt": {
+      "layout": "V8", "cylinders": 8, "litres": 5.1, "aspiration": "turbo",
+      "idle": 1000, "redline": 8500,
+      "torque": [[1000, 520], [2700, 1000], [4000, 1280], [5100, 1500], [7000, 1440], [7800, 1420], [8500, 1300]],
+      "sound": "v8flat", "mass": 200, "fits": ["turbo"]
+    },
     "w16-80": {
       "layout": "W16", "cylinders": 16, "litres": 8.0, "aspiration": "turbo",
       "idle": 750, "redline": 6500,

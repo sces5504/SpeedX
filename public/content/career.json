@@ -56,7 +56,8 @@
     "fd": {
       "price": 52000
     },
-    "veyron": {}
+    "veyron": {},
+    "ccgt1": {}
   },
   "parts": {
     "internals": [

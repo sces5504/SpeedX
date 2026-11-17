@@ -5,6 +5,10 @@
 // is a place where it steps or zig-zags. For every point of every ring this measures how far
 // the point sits off the straight line between its two neighbours along the car ("bump") and
 // reports the places where three bumps in a row point up, down, up.
+// It also gives two numbers for the user's "polish" test (curves straight where straight, round
+// where round, never wavy): how many times the bend changes direction along the front 40 % of the
+// skin (the accepted FD / S13 / AE86 score about 44-47; fewer is smoother), and whether the middle
+// of the bonnet climbs steadily to the windscreen (a dip before it reads as a hump).
 import { makeShell, ACROSS } from '../src/vehicles/carShell.js';
 import { loadAllCars } from './content.mjs';
 
@@ -45,7 +49,32 @@ for (const id of ids) {
   const shown = [];
   for (const spot of found) if (!shown.some((s) => Math.abs(s.t - spot.t) < 0.03 && Math.abs(s.j - spot.j) <= 1)) shown.push(spot);
   total += shown.length;
-  console.log(`${id}: ${shown.length ? shown.length + ' wrinkle(s)' : 'smooth'}`);
+  // Bends that change direction along each lengthwise line, nose to 40 % of the length.
+  let bends = 0;
+  for (let j = 5; j < ACROSS; j++) {
+    if (j === 9 || j === 10) continue;
+    for (const axis of [0, 1]) {
+      let last = 0;
+      for (let i = 1; i < rings - 1; i++) {
+        const p = at(i - 1, j), q = at(i, j), r = at(i + 1, j), from = q[2] - frontZ;
+        if (from / spec.length > 0.4 || from < 0.06) continue;
+        const f = (q[2] - p[2]) / (r[2] - p[2]), bend = (q[axis] - (p[axis] + (r[axis] - p[axis]) * f)) / ((r[2] - p[2]) ** 2);
+        if (Math.abs(bend) < 0.05) continue;                 // (practically straight here)
+        if (last && Math.sign(bend) !== last) bends++;
+        last = Math.sign(bend);
+      }
+    }
+  }
+  // The middle of the bonnet, nose to windscreen: does it ever go down?
+  const cowl = spec.stations.find((st) => st[4] === 'ws')[0];
+  let dips = 0, previous = -Infinity;
+  for (let i = 0; i < rings; i++) {
+    const [, y, z] = at(i, ACROSS - 1);
+    if ((z - frontZ) / spec.length > cowl) break;
+    if (y < previous - 0.0005) dips++;
+    previous = y;
+  }
+  console.log(`${id}: ${shown.length ? shown.length + ' wrinkle(s)' : 'smooth'} · ${bends} bends change direction in the front 40 % · bonnet ${dips ? `dips ${dips} time(s) before the windscreen` : 'rises steadily to the windscreen'}`);
   for (const s of shown.slice(0, 12)) console.log(`   ${(s.t * spec.length).toFixed(2)} m from the nose (t = ${s.t.toFixed(3)}), ${names[s.j]}: ${(s.size * 1000).toFixed(0)} mm ${s.axis ? 'up/down' : 'in/out'}`);
 }
 if (total) process.exitCode = 1;

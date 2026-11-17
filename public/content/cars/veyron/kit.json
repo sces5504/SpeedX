@@ -34,7 +34,10 @@
         {"is": "red", "box": [0, 0.3, 0.8, 0.815], "round": 0.006}
       ] } } }
     ] },
-    {"use": "spoiler", "without": ["wing-none", "wing-gt", "wing-gt-low", "wing-gt-high"]},
+    { "id": "spoiler", "title": "SPOILER", "options": [
+      { "id": "veyron-wing", "look": { "spoiler": { "airfoil": true, "rise": 0.15, "back": 0.3, "span": 0.8, "chord": 0.3, "angle": 0.12, "posts": 0.32, "color": "paint2", "trim": "black" } } },
+      { "id": "veyron-wing-up", "look": { "spoiler": { "airfoil": true, "rise": 0.24, "back": 0.3, "span": 0.84, "chord": 0.32, "angle": 0.2, "posts": 0.32, "color": "paint2", "trim": "black" } } }
+    ] },
     {"use": "rims"}
   ]
 }

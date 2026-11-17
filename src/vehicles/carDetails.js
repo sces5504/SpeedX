@@ -167,10 +167,15 @@ export function addBodyDetails(body, surface, spec, dims, paint) {
     const sillRun = steps(doorFront, doorEnds[doorEnds.length - 1], 14);
     gaps.push(strip(lengthwise(sillRun, U.sill), lengthwise(sillRun, U.sill + 0.12)));
     // bonnet and boot lid: a line along each edge and one across the front (or back)
-    for (const [from, to, cross] of [[0.045, cowl - 0.02, 0.045], [deck + 0.02, 0.965, 0.965]]) {
+    // (a supercar body's bonnet ends at its grille, which stands out of the nose: no line across
+    // the front there, and the side lines start a little further back, clear of the nose's curve;
+    // "bonnetFrom" in car.json moves that start, e.g. behind a wing that humps up over the wheel)
+    const bonnetFrom = spec.bonnetFrom ?? (surface.sculpted ? 0.14 : 0.045);
+    for (const [from, to, cross] of [[bonnetFrom, cowl - 0.02, surface.sculpted ? null : 0.045], [deck + 0.02, 0.965, 0.965]]) {
       if (to - from < 0.05) continue;                        // no real boot (hatchback, truck)
       const run = steps(from, to, 12);
       gaps.push(strip(lengthwise(run, U.deckEdge - 0.05), lengthwise(run, U.deckEdge + 0.08)));
+      if (cross === null) continue;
       const acrossTheTop = steps(U.deckEdge, U.centre, 8);
       gaps.push(strip(row(cross - line, acrossTheTop), row(cross + line, acrossTheTop)));
     }

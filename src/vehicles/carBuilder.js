@@ -26,8 +26,9 @@ import { beamMaterial, canvasTexture, enhanceMaterial, makeGlowTexture } from '.
 import { getCarModel } from './carModel.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { U, makeShell } from './carShell.js';
-import { addBodyDetails, buildCargoBox, buildLamp, chrome } from './carDetails.js';
+import { addBodyDetails, buildCargoBox, buildLamp, chrome, lensMaterial } from './carDetails.js';
 import { LAMP_COLOURS, buildEndParts, buildSideParts, endParts, flat } from './carEnds.js';
+import { buildPieces, isPiece } from './carPieces.js';
 import { buildWheel } from './carWheel.js';
 import { smallLights } from '../render/smallLights.js';
 import { carReflection } from '../render/reflections.js';
@@ -123,14 +124,22 @@ export function buildCar(spec, colorHex) {
     // Generated car: every part is laid on the skin (carEnds.js).
     // (finishes of this car's own: "paint2" = its second paint colour, for panels listed in nose / tail / side)
     const own = spec.twoTone !== undefined ? { paint2: flat(painted(spec.twoTone, false)) } : {};
-    const ends = buildEndParts(surface, parts, own);
+    // (the flat parts are drawn on the skin; the real 3D "pieces" among them are built in carPieces.js)
+    const flatOnly = (list) => (list || []).filter((p) => !isPiece(p));
+    const ends = buildEndParts(surface, { nose: flatOnly(parts.nose), tail: flatOnly(parts.tail) }, own);
     body.add(...ends.meshes);
-    if (spec.side) body.add(...buildSideParts(surface, spec.side, own));
+    if (spec.side) body.add(...buildSideParts(surface, flatOnly(spec.side), own));
     for (const name in ends.lamps) lamps[name].push(...ends.lamps[name]);
+    const pieceLists = { nose: parts.nose.filter(isPiece), tail: parts.tail.filter(isPiece), side: (spec.side || []).filter(isPiece) };
+    if (pieceLists.nose.length || pieceLists.tail.length || pieceLists.side.length) {
+      const pieces = buildPieces(surface, pieceLists, { ...own, paint: detailPaint });
+      body.add(...pieces.meshes);
+      for (const name in pieces.lamps) lamps[name].push(...pieces.lamps[name]);
+    }
   } else {
     // Real model: only the lamps, as flat plates stuck on its nose and tail.
     for (const [list, tail] of [[parts.nose, false], [parts.tail, true]]) {
-      for (const part of list.filter((p) => LAMP_COLOURS[p.is] !== undefined && p.box)) {
+      for (const part of list.filter((p) => LAMP_COLOURS[p.is] !== undefined && p.box && !isPiece(p))) {
         const [from, to, bottom, top] = part.box;
         for (const side of [-1, 1]) {
           const at = where(tail, side * (from + to) / 2, (bottom + top) / 2);
@@ -190,14 +199,28 @@ export function buildCar(spec, colorHex) {
   const plate = makePlate();
   const [plateFrontY, plateRearY] = spec.plates ?? [spec.stations[0][1] - 0.12, T.y - T.h - 0.1];
   const plateGeo = new THREE.PlaneGeometry(0.31, 0.155);
-  for (const [tail, y] of [[false, plateFrontY], [true, plateRearY]]) {
+  // ("plateSide": metres the front plate sits off the centre line, for a car whose grille takes the middle)
+  for (const [tail, y, x] of [[false, plateFrontY, spec.plateSide ?? 0], [true, plateRearY, 0]]) {
     // A plate lies against the bodywork: tilted the way the nose or tail leans at that height.
     // (never flatter than about 35 degrees, or a plate on a low nose would sink into the bonnet)
-    const upper = where(tail, 0, y + 0.07), lower = where(tail, 0, y - 0.07), out = tail ? 1 : -1;
+    const upper = where(tail, x, y + 0.07), lower = where(tail, x, y - 0.07), out = tail ? 1 : -1;
     const lean = Math.min(0.1, Math.max(-0.1, upper.z - lower.z));
     const facing = new THREE.Vector3(0, lean * -out, 0.14 * out).normalize();
-    const mesh = add(new THREE.Mesh(plateGeo, plate.material), 0, y, tail ? Math.max(upper.z, lower.z) - Math.abs(lean) / 2 : Math.min(upper.z, lower.z) + Math.abs(lean) / 2);
+    if (x) {
+      // Off the centre line the nose also turns away sideways: face the way the skin does there.
+      const across = where(tail, x + 0.12, y).sub(where(tail, x - 0.12, y)), down = lower.clone().sub(upper);
+      facing.crossVectors(across, down).normalize();
+      if (facing.z * out < 0) facing.negate();
+    }
+    const mesh = add(new THREE.Mesh(plateGeo, plate.material), x, y, tail ? Math.max(upper.z, lower.z) - Math.abs(lean) / 2 : Math.min(upper.z, lower.z) + Math.abs(lean) / 2);
     mesh.position.addScaledVector(facing, 0.015);
+    if (x) {
+      // A flat plate on a curved corner of the nose: stand it off far enough that no part of the
+      // skin behind it comes through (as a real plate on its bracket does).
+      let clear = 0;
+      for (let i = 0; i <= 6; i++) for (let k = 0; k <= 4; k++) clear = Math.max(clear, where(tail, x + (i / 6 - 0.5) * 0.32, y + (k / 4 - 0.5) * 0.16).sub(mesh.position).dot(facing));
+      mesh.position.addScaledVector(facing, clear + 0.006);
+    }
     mesh.lookAt(mesh.position.clone().add(facing));
   }
 
@@ -211,17 +234,50 @@ export function buildCar(spec, colorHex) {
       // plates on two tall stays ("back": metres from the tail, default 0.2).
       // "spoiler": { "lip": true }  = a ducktail: a body-colour lip turned up along the edge of the boot.
       // "rise" instead of "height" = metres above the boot (a shared part that fits any car).
+      // A wing made for one car may also set: "span" (share of the car's width), "chord" (metres
+      // front to back), "angle" (radians, trailing edge up), "posts" (share of the half width out
+      // from the centre where the two posts stand - they then stand on the skin itself) and
+      // "color": "paint2" (the car's second colour) or "black".
       const wing = typeof spec.spoiler === 'number' ? { height: spec.spoiler } : { ...spec.spoiler };
-      const material = wing.gt ? trimMat : detailPaint, z = rearZ - (wing.back ?? (wing.lip ? 0.07 : 0.2));
+      const own = wing.color === 'paint2' && spec.twoTone !== undefined ? painted(spec.twoTone, false) : wing.color === 'black' ? trimMat : null;
+      const material = own || (wing.gt ? trimMat : detailPaint), z = rearZ - (wing.back ?? (wing.lip ? 0.07 : 0.2));
       const deckY = surface.at(surface.tOf(z), U.centre).y;
       wing.height ??= deckY + (wing.rise ?? 0.15);
-      const span = spec.width * (wing.gt ? 0.98 : wing.lip ? 0.86 : 0.94);
+      const span = spec.width * (wing.span ?? (wing.gt ? 0.98 : wing.lip ? 0.86 : 0.94));
       if (wing.lip) {
         add(new THREE.Mesh(new RoundedBoxGeometry(span, 0.022, 0.17, 2, 0.01), material), 0, deckY + 0.03, z).rotation.x = -0.42;      // (turned UP toward the back)
-      } else {
-        add(new THREE.Mesh(new RoundedBoxGeometry(span, 0.03, wing.gt ? 0.3 : 0.24, 2, 0.012), material), 0, wing.height, z).rotation.x = -0.07;     // (a wing's trailing edge is the high one)
+      } else if (wing.airfoil) {
+        // "airfoil": true = a wing built like a real one (a GT car's): the main plane is a true wing
+        // section (round leading edge, thin trailing edge) with a small lip along its trailing edge,
+        // a shaped end plate at each tip, and two flat uprights with a cut-out in them standing on
+        // the deck. "trim" = the finish of the end plates and uprights ("black", "paint2" or "paint");
+        // "endplates": [above, below] their size; "light": true makes the lip a brake-light strip.
+        const chord = wing.chord ?? 0.3, angle = wing.angle ?? 0.07;
+        const trim = wing.trim === 'paint2' && spec.twoTone !== undefined ? painted(spec.twoTone, false) : wing.trim === 'paint' ? detailPaint : trimMat;
+        const blade = new THREE.Group();                         // the main plane, its lip and end plates, tilted together
+        blade.position.set(0, wing.height, z);
+        blade.rotation.x = -angle;
+        body.add(blade);
+        blade.add(new THREE.Mesh(airfoilBlade(span, chord, 0.12), material));
+        // ("light": true = the lip is a red light strip that glows with the tail / brake lamps)
+        const lip = new THREE.Mesh(new RoundedBoxGeometry(span - 0.04, 0.014, 0.012, 1, 0.004), wing.light ? lensMaterial(LAMP_COLOURS.brake) : material);
+        lip.position.set(0, 0.009, chord / 2 - 0.006);
+        blade.add(lip);
+        if (wing.light) lamps.brake.push(lip);
+        const [above, below] = wing.endplates ?? [0.05, 0.12];          // (metres the end plates reach above and below the blade)
         for (const side of [-1, 1]) {
-          add(box(wing.gt ? 0.02 : 0.035, wing.height - deckY, wing.gt ? 0.2 : 0.16, material), side * halfW * (wing.gt ? 0.4 : 0.72), (wing.height + deckY) / 2, z);
+          const plate = new THREE.Mesh(endPlate(chord * 1.18, above, below), trim);
+          plate.position.set(side * (span / 2 + 0.004), 0, 0.01);
+          blade.add(plate);
+          // Uprights: from the deck up to the underside of the blade, wide at the foot.
+          const x = side * halfW * (wing.posts ?? 0.3), footY = topSkin(z, x) - 0.01;
+          add(new THREE.Mesh(wingUpright(wing.height - footY - 0.012, chord * 0.85, chord * 0.42), trim), x, footY, z);
+        }
+      } else {
+        add(new THREE.Mesh(new RoundedBoxGeometry(span, 0.03, wing.chord ?? (wing.gt ? 0.3 : 0.24), 2, 0.012), material), 0, wing.height, z).rotation.x = -(wing.angle ?? 0.07);     // (a wing's trailing edge is the high one)
+        for (const side of [-1, 1]) {
+          const x = side * halfW * (wing.posts ?? (wing.gt ? 0.4 : 0.72)), footY = wing.posts !== undefined ? topSkin(z, x) - 0.01 : deckY;
+          add(box(wing.gt ? 0.02 : 0.035, wing.height - footY, wing.gt ? 0.2 : 0.16, material), x, (wing.height + footY) / 2, z);
           if (wing.gt) add(box(0.015, 0.17, 0.34, material), side * span / 2, wing.height - 0.02, z);
         }
       }
@@ -299,7 +355,9 @@ export function buildCar(spec, colorHex) {
     // black disc = the dark inner wall of the wheel arch
     const arch = new THREE.Mesh(new THREE.CircleGeometry(r + 0.075, 20), archMat);
     arch.rotation.y = side * Math.PI / 2;
-    add(arch, model ? side * (halfW - r * 0.98) : side * (halfW * 0.5), r + 0.01, z);
+    // (on a supercar body the bonnet sits low between the wings: the disc stands further out, under
+    // the wing, or its top would show through the bonnet)
+    add(arch, model ? side * (halfW - r * 0.98) : side * (halfW * (surface?.sculpted ? 0.74 : 0.5)), r + 0.01, z);
   });
 
   // ---- Fake pool of light on the road (for AI cars without a real spotlight) -------
@@ -382,6 +440,45 @@ export function randomPlateText() {
   const digit = () => Math.floor(Math.random() * 10);
   return `${1 + Math.floor(Math.random() * 9)}${letter()}${letter()}${letter()}${digit()}${digit()}${digit()}`;
 }
+// A wing blade: a symmetrical wing section (NACA 00xx: "thickness" = share of the chord) swept
+// along x over `span`, with its tips rounded off. Centred; the leading edge faces forward (-z).
+function airfoilBlade(span, chord, thickness) {
+  const shape = new THREE.Shape(), steps = 14, half = (x) => 5 * thickness * chord * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x ** 3 - 0.1036 * x ** 4);
+  for (let k = 0; k <= steps; k++) { const x = (1 - Math.cos((k / steps) * Math.PI)) / 2; (k ? shape.lineTo : shape.moveTo).call(shape, x * chord, half(x)); }
+  for (let k = steps - 1; k > 0; k--) { const x = (1 - Math.cos((k / steps) * Math.PI)) / 2; shape.lineTo(x * chord, -half(x)); }
+  const tip = Math.min(0.012, thickness * chord * 0.4);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: span - 2 * tip, bevelEnabled: true, bevelThickness: tip, bevelSize: tip * 0.6, bevelSegments: 3, curveSegments: 4 });
+  // (shape drawn in x = chord, y = thickness; turn it so the chord runs along z and the span along x)
+  return geometry.translate(-chord / 2, 0, -(span - 2 * tip) / 2).rotateY(-Math.PI / 2);
+}
+
+// An end plate for a wing tip: a thin plate, in the car's z-y plane, with rounded corners;
+// `above` / `below` metres reach past the wing's top and bottom. Centred on the wing's chord.
+function endPlate(length, above, below) {
+  const shape = new THREE.Shape(), r = 0.03, x0 = -length / 2, x1 = length / 2, y0 = -below, y1 = above;
+  shape.moveTo(x0 + r, y0); shape.lineTo(x1 - r * 2, y0); shape.quadraticCurveTo(x1, y0, x1, y0 + r * 2);
+  shape.lineTo(x1, y1 - r); shape.quadraticCurveTo(x1, y1, x1 - r, y1); shape.lineTo(x0 + r * 3, y1);
+  shape.quadraticCurveTo(x0, y1, x0, y1 - r * 2); shape.lineTo(x0, y0 + r); shape.quadraticCurveTo(x0, y0, x0 + r, y0);
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2, curveSegments: 6 })
+    .translate(0, 0, -0.004).rotateY(-Math.PI / 2);
+}
+
+// A wing upright: a flat plate in the car's z-y plane, `foot` metres long at the bottom and `head`
+// at the top, `tall` high, its back edge sloping, with a rounded cut-out to lighten it.
+// Its origin is the middle of its foot.
+function wingUpright(tall, foot, head) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-foot / 2, 0); shape.lineTo(foot / 2, 0); shape.lineTo(head / 2, tall); shape.lineTo(-head / 2, tall); shape.closePath();
+  if (tall > 0.08) {
+    const hole = new THREE.Path(), inset = 0.025, top = tall - inset, low = inset + 0.01;
+    const across = (y) => lerp(foot, head, y / tall) / 2 - inset;
+    hole.moveTo(-across(low), low); hole.lineTo(across(low), low); hole.lineTo(across(top), top); hole.lineTo(-across(top), top); hole.closePath();
+    shape.holes.push(hole);
+  }
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2 })
+    .translate(0, 0, -0.006).rotateY(-Math.PI / 2);
+}
+
 function makePlate() {
   const canvas = document.createElement('canvas');
   canvas.width = 256; canvas.height = 128;

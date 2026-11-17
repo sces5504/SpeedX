@@ -2,7 +2,7 @@
 //   node tools/shot-receiver.mjs            (leave it running; Ctrl+C to stop)
 // The page draws several camera angles of the garage into one sheet and POSTs it here:
 //   POST http://localhost:5199/<name>   (body = JPEG bytes)   ->  previews/shots/<name>.jpg
-// The page-side helper to paste in the browser console is in .claude/skills/speedx-tuning-parts/SKILL.md.
+// The page side is tools/car-studio.js (a car from every angle; see its header).
 // (previews/ is not committed: these are working pictures.)
 import http from 'node:http';
 import fs from 'node:fs';

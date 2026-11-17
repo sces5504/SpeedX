@@ -10,7 +10,8 @@
     "ae86":   { "real": "Toyota Sprinter Trueno GT-APEX (AE86), 1985",      "brand": "ORIVANE",   "name": "Kestle E14" },
     "fd":     { "real": "Mazda RX-7 Type R (FD3S), 1993",                   "brand": "HAZERILL",  "name": "Afterglow D36" },
     "evo2":   { "real": "Mercedes-Benz 190 E 2.5-16 Evolution II, 1990",    "brand": "VELDGRAFT", "name": "Spire 25 Cup" },
-    "veyron": { "real": "Bugatti Veyron 16.4, 2005",                        "brand": "VELMORI",   "name": "Meridian 80" }
+    "veyron": { "real": "Bugatti Veyron 16.4, 2005",                        "brand": "VELMORI",   "name": "Meridian 80" },
+    "ccgt1":   { "real": "Koenigsegg CCGT1, 2026 (Jesko Attack performance)", "brand": "尖端科技",  "name": "Halo GT1" }
   },
   "engines": {
     "sr20det":   { "real": "Nissan SR20DET — 2.0 turbo four", "brand": "BRINEWAKE", "name": "Squall I4-20T" },
@@ -34,7 +35,8 @@
     "f140":      { "real": "Ferrari F140 — 6.3 V12 (F12)", "brand": "VESPARCH", "name": "Ovazione V12-63" },
     "l539":      { "real": "Lamborghini L539 — 6.5 V12 (Aventador)", "brand": "RAVASCALA", "name": "Chasm V12-65" },
     "m120":      { "real": "Mercedes M120 — 6.0 V12 (S 600, Zonda)", "brand": "VELDGRAFT", "name": "Colonnade V12-60" },
-    "w16-80":    { "real": "Bugatti W16 — 8.0 quad-turbo sixteen", "brand": "VELMORI", "name": "Orrery W16-80T" }
+    "w16-80":    { "real": "Bugatti W16 — 8.0 quad-turbo sixteen", "brand": "VELMORI", "name": "Orrery W16-80T" },
+    "kg-v8-51tt": { "real": "Koenigsegg 5.1 twin-turbo flat-plane V8 (CC850 / Jesko, E85 figures)", "brand": "尖端科技", "name": "Lantern V8-51TT" }
   },
   "parts": {
     "internals-1": { "brand": "KINOKAZE",  "name": "Valve Reed KK-E11",    "is": "Engine stage 1 — intake, exhaust, valves" },
@@ -133,6 +135,8 @@
     "veyron-front-ss":       { "brand": "路斬", "name": "切羽 RZ-M30", "is": "Wider intakes and a lower centre inlet" },
     "veyron-rear-ss":        { "brand": "路斬", "name": "後刻 RZ-M33", "is": "Bigger diffuser and outlets" },
     "veyron-head-led":       { "brand": "LUMENFOLD", "name": "Duskline LF-F41", "is": "Thin light strips, black housing" },
-    "veyron-tail-bar":       { "brand": "LUMENFOLD", "name": "Rear Echo LF-R41", "is": "Light bars instead of the round lamps" }
+    "veyron-tail-bar":       { "brand": "LUMENFOLD", "name": "Rear Echo LF-R41", "is": "Light bars instead of the round lamps" },
+    "veyron-wing":           { "brand": "VELMORI",   "name": "Aero Blade M80",   "is": "GT wing: wing section, end plates, cut-out uprights" },
+    "veyron-wing-up":        { "brand": "VELMORI",   "name": "Aero Blade M80 H", "is": "The GT wing set higher and wider, for more grip" }
   }
 }

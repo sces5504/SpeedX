@@ -45,6 +45,7 @@ export function makeShell(spec, dims) {
   for (const ring of rings) {
     ring.half = ringPoints(ring, spec);
     ring.zone = spec.twoToneZone;                       // two-tone cars: where the second colour goes (see secondColour)
+    if (spec.greenhouse || spec.wingCrown) ring.under = panelsAt(spec, ring.t);      // (supercar bodies only: see panelsAt)
     ring.bonnet = ring.t < cowl;
   }
   return { geometry: shellGeometry(rings), surface: makeSurface(rings, spec, dims) };
@@ -149,6 +150,7 @@ function makeSurface(rings, spec, dims) {
   const outlines = new Map();                                 // outlineAt() answers, kept: parts ask for the same heights again and again
   return {
     cabin: cabinSpan(spec),
+    sculpted: Boolean(spec.greenhouse || spec.wingCrown),     // a supercar body (sculpt() below): it bends sharply at the cabin's edge
     windows: sideWindows(spec),
     tOf: (z) => (z - dims.frontZ) / spec.length,
     at(t, u, side = 1, lift = 0) {
@@ -277,6 +279,14 @@ function makeRings(spec, dims) {
       top: soft((s) => Math.max(s[1], s[2]), 0.05),              // height of the roof (= belt where there is no cabin)
       w: dims.halfW * soft((s) => s[3], 0.08),                   // half width
     };
+    if (spec.greenhouse || spec.wingCrown) {
+      // A supercar body is all long curves: the shoulder line and the width follow a smooth curve
+      // through the stations instead of straight pieces rounded off at the joins (those show as
+      // slight wobbles on big curved panels). Where there is no cabin the top is the shoulder line.
+      ring.belt = smoothProfile(st, (s) => s[1], t);
+      ring.w = dims.halfW * smoothProfile(st, (s) => s[3], t);
+      if (profile(st, (s) => s[2], t) === 0 && softProfile(st, (s) => s[2], t, 0.05) === 0) ring.top = ring.belt;
+    }
     ring.top = Math.max(ring.top, ring.belt);
     ring.cabin = smoothstep(0, 0.14, ring.top - ring.belt);      // 0 = flat deck, 1 = full cabin
     ring.roofHeight = roofHeight;                                // the tallest the roof gets anywhere on this car
@@ -295,11 +305,24 @@ function makeRings(spec, dims) {
         ring.arch = lerp(round, -softMax(-round, 0.08 - ring.belt), ring.cabin);
         ring.hump = softMax(0, ring.arch + 0.08 - ring.belt);
       }
+      // (supercar bodies: the hump over the wheel starts before the arch and dies away after it,
+      // instead of beginning abruptly at the arch's edge, which left a dent in the wing)
+      if (spec.greenhouse || spec.wingCrown) {
+        const reach = Math.min(dz, archRadius), round = spec.wheelRadius + Math.sqrt(archRadius * archRadius - reach * reach);
+        const hump = softMax(0, round + 0.08 - ring.belt) * smoothstep(archRadius + 0.3, archRadius * 0.6, dz) * (1 - ring.cabin);
+        if (dz <= archRadius + 0.3) ring.hump = Math.max(dz <= archRadius ? 0 : ring.hump, hump);
+      }
       ring.flare = Math.max(ring.flare, flare * smoothstep(archRadius + 0.24, archRadius * 0.7, dz));
     }
     // Side window here? Only where the cabin is tall enough to hold one.
     ring.window = ring.top - ring.belt > 0.07 ? windows.findIndex((rows) => t >= rows[0].t - 1e-6 && t <= rows[rows.length - 1].t + 1e-6) : -1;
     ring.glass = ring.window >= 0 ? windowAt(windows[ring.window], t) : besideWindows(windows, t);
+    // Supercar shapes (only for cars that list them; see sculpt() below).
+    if (spec.greenhouse || spec.wingCrown) {
+      ring.greenhouse = spec.greenhouse ? smoothProfile(spec.greenhouse, (r) => r[1], t) : 0.945;
+      ring.crown = spec.wingCrown ? smoothProfile(spec.wingCrown, (r) => r[1], t) : 0;
+      ring.ridge = spec.wingCrown ? smoothProfile(spec.wingCrown, (r) => r[2] ?? 0, t) : 0;
+    }
     return ring;
   });
   return rings;
@@ -320,6 +343,26 @@ function softProfile(st, value, t, reach) {
   let sum = 0;
   for (const [step, weight] of [[-1, 1], [-0.5, 2], [0, 3], [0.5, 2], [1, 1]]) sum += weight * profile(st, value, clamp(t + step * reach, 0, 1));
   return sum / 9;
+}
+
+// ...and a smooth curve through the stations (supercar bodies): it passes through every station
+// and bends gently between them, but never swings past them (no bulges or dips of its own) -
+// a "monotone cubic": between two stations it only rises or only falls, like the points do.
+export function smoothProfile(rows, value, t) {
+  const n = rows.length, x = rows.map((r) => r[0]), y = rows.map(value);
+  if (t <= x[0]) return y[0];
+  if (t >= x[n - 1]) return y[n - 1];
+  const slope = [], tangent = [];
+  for (let k = 0; k < n - 1; k++) slope.push((y[k + 1] - y[k]) / (x[k + 1] - x[k] || 1e-9));
+  for (let k = 0; k < n; k++) {
+    if (k === 0 || k === n - 1) { tangent.push(slope[k === 0 ? 0 : n - 2]); continue; }
+    const a = slope[k - 1], b = slope[k];
+    tangent.push(a * b <= 0 ? 0 : (3 * (x[k + 1] - x[k - 1])) / ((2 * x[k + 1] - x[k] - x[k - 1]) / a + (x[k + 1] + x[k] - 2 * x[k - 1]) / b));
+  }
+  let k = 0;
+  while (k < n - 2 && t >= x[k + 1]) k++;
+  const h = x[k + 1] - x[k], f = (t - x[k]) / h, f2 = f * f, f3 = f2 * f;
+  return (2 * f3 - 3 * f2 + 1) * y[k] + (f3 - 2 * f2 + f) * h * tangent[k] + (-2 * f3 + 3 * f2) * y[k + 1] + (f3 - f2) * h * tangent[k + 1];
 }
 
 // Which part of the length has side windows: { from, to, middle } as fractions, or null.
@@ -394,6 +437,7 @@ function ringPoints(ring, spec) {
   const cabinTop = [[0.992, belt - 0.10], [0.975, belt - 0.035], shoulder, onGlass(ring.glass.lo), onGlass(ring.glass.hi),
     roofEdge, [lean * 0.93, top - 0.02 * Math.tanh(rise * 7)], [lean * 0.5, top - 0.004], [0, top]];
   const upper = deck.map((p, k) => [lerp(p[0], cabinTop[k][0], cabin) * w, lerp(p[1], cabinTop[k][1], cabin)]);
+  if (ring.greenhouse !== undefined) sculpt(upper, ring, w);
   if (ring.hump) [1, 1, 1, 0.95, 0.85, 0.5, 0.12].forEach((share, k) => { upper[k][1] += ring.hump * share; });   // the wing humps up over the wheel
 
   const tuck = spec.tuck ?? 0.03;                                // how far the sill sits inside the widest point
@@ -406,13 +450,52 @@ function ringPoints(ring, spec) {
     const edge = lower[4][0];
     lower[1] = [0.45 * w, arch]; lower[2] = [0.86 * w, arch]; lower[3] = [edge - 0.04, arch]; lower[4] = [edge, arch];
     // (the tighter the squeeze, the more the wing becomes one straight sweep from the arch to the shoulder)
-    const [shoulderX, shoulderY] = upper[2], was = lower[5][1], now = softMax(was, arch + 0.025), squeeze = (shoulderY - now) / (shoulderY - was);
-    for (const point of [lower[5], upper[0], upper[1]]) {
+    // (on a sculpted supercar the side ends at the wing top, point 1, not at the cabin's edge)
+    const top = ring.greenhouse !== undefined ? 1 : 2;
+    const [shoulderX, shoulderY] = upper[top], was = lower[5][1], now = softMax(was, arch + 0.025), squeeze = (shoulderY - now) / (shoulderY - was);
+    for (const point of [lower[5], ...upper.slice(0, top)]) {
       point[1] = shoulderY - (shoulderY - point[1]) * squeeze;
       point[0] = lerp(lerp(edge, shoulderX, (point[1] - arch) / (shoulderY - arch)), point[0], squeeze);
     }
   }
   return [...lower, ...upper];
+}
+
+// ---- 2b. Supercar shapes (optional) -------------------------------------------------
+// Many supercars are not one block with a cabin on top. Two things in car.json describe them;
+// a car that lists neither is built exactly as above.
+//   "greenhouse": [[t, share], ...]  where the side glass (and, on the bonnet and engine deck,
+//        the middle of the deck) starts, as a share of the half width. The plain value is 0.945
+//        (the glass grows straight out of the body's shoulder). Less makes the cabin narrower
+//        than the body and leaves a rounded wing top beside it: a mid-engined car's hips.
+//   "wingCrown": [[t, metres, ridge], ...]  how far the middle of the bonnet / engine deck sits BELOW
+//        the wing tops: high front wings with a valley between them. (Fades out under the cabin.)
+//        The optional third number lifts the very middle again by that many metres: a raised
+//        spine down the bonnet with a shallow trough each side of it (as on a Veyron).
+// Seen across one ring, from the side of the car inward (upper = the points from the waist up):
+//
+//            wing top (1)
+//        (0)/  ‾‾‾‾‾‾‾‾‾‾‾‾‾\ (2)  edge of the cabin or of the valley    (3..8) glass and roof,
+//          |                  \___________________ middle                  or the floor of the valley
+function sculpt(upper, ring, w) {
+  const share = ring.greenhouse, valley = ring.crown * (1 - ring.cabin);
+  const wingTop = lerp(0.975, share, 0.3) * w;                // the highest point of the wing, across
+  // The cabin, or the middle of the deck, moves in.
+  for (let k = 2; k < upper.length; k++) upper[k][0] *= share / 0.945;
+  // The wing: a fuller, rounder side, and its top moved in over the new ledge.
+  upper[0] = [lerp(0.992, 0.997, 1 - ring.cabin) * w, lerp(upper[0][1], ring.belt - 0.06, 0.5)];
+  upper[1] = [wingTop, ring.belt - 0.008];
+  // On the deck, points 2-4 are bunched at its edge; spread them over the slope into the valley.
+  const deck = 1 - ring.cabin, edgeX = upper[2][0];
+  [[2, 0.4, 0.3], [3, 0.72, 0.68], [4, 0.9, 0.9]].forEach(([k, across, down]) => {
+    upper[k][0] = lerp(upper[k][0], lerp(wingTop, edgeX, across), deck);
+    upper[k][1] -= valley * down;
+  });
+  for (let k = 5; k < upper.length; k++) upper[k][1] -= valley;
+  // The spine: the middle of the deck rises again in one round arch, like a single bonnet panel
+  // (shares follow a parabola over the points' distance from the centre; point 8 is the centre line).
+  const ridge = ring.ridge * (1 - ring.cabin);
+  if (ridge) [[5, 0], [6, 0.14], [7, 0.75], [8, 1]].forEach(([k, share]) => { upper[k][1] += ridge * share; });
 }
 
 // ---- 3. What each patch of skin is made of ------------------------------------------
@@ -429,7 +512,32 @@ function secondColour(ring, j) {
   return j <= 4;
 }
 
+// A supercar body bends so sharply round its wings that a side panel in the second colour
+// ("side" parts with "is": "paint2", carEnds.js) cannot follow the skin exactly everywhere, and
+// the paint underneath would show through in places. So the skin itself is painted in the
+// second colour wherever such a panel covers it completely; the panel on top still draws the
+// clean edge. Returns the stretches round the ring [from u, to u] the panels cover at t.
+function panelsAt(spec, t) {
+  const stretches = [];
+  for (const part of spec.side || []) {
+    if (part.is !== 'paint2' || part.piece) continue;
+    const rows = part.rows;
+    if (t < rows[0][0] || t > rows[rows.length - 1][0]) continue;
+    let k = 0;
+    while (k < rows.length - 2 && t >= rows[k + 1][0]) k++;
+    const f = clamp((t - rows[k][0]) / (rows[k + 1][0] - rows[k][0] || 1), 0, 1);
+    const u = (h) => U.sill + h * (U.shoulder - U.sill);
+    stretches.push([u(lerp(rows[k][1], rows[k + 1][1], f)), u(lerp(rows[k][2], rows[k + 1][2], f))]);
+  }
+  return stretches;
+}
+const underPanel = (ring, j) => ring.under?.some(([from, to]) => from <= j && to >= j + 1);
+
 function patchMaterial(ring, next, j) {
+  const material = plainMaterial(ring, next, j);
+  return material === MATERIALS.paint && underPanel(ring, j) && underPanel(next, j) ? MATERIALS.lower : material;
+}
+function plainMaterial(ring, next, j) {
   if (j <= 2 || (ring.arch > 0 && j <= 3)) return MATERIALS.trim;           // underside, inside of the wheel arch
   if (j <= 4) return secondColour(ring, j) ? MATERIALS.lower : MATERIALS.paint;   // sill and lower door
   if (j === 9) return ring.window >= 0 && ring.window === next.window ? MATERIALS.glass : MATERIALS.paint;   // side windows

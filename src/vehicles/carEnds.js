@@ -38,7 +38,7 @@ export const flat = (material) => Object.assign(material, { polygonOffset: true,
 const plastic = (settings) => flat(enhanceMaterial(new THREE.MeshStandardMaterial({ envMap: carReflection, ...settings }), { limit: LIMIT }));
 // A grille: black with bright bars. The picture repeats every 4 cm of the real car.
 const grilleLook = (draw) => plastic({ color: 0xffffff, roughness: 0.35, metalness: 0.5, map: canvasTexture(32, 32, (g, w, h) => { g.fillStyle = '#050506'; g.fillRect(0, 0, w, h); draw(g, w, h); }) });
-const FINISHES = {
+export const FINISHES = {
   black: plastic({ color: 0x08090a, roughness: 0.6 }),                       // unpainted bumper, intake, plastic trim
   chrome: plastic({ color: 0xc9ccd1, roughness: 0.18, metalness: 1 }),
   grey: plastic({ color: 0x4a4d52, roughness: 0.6 }),                        // grey plastic bumper
@@ -47,7 +47,7 @@ const FINISHES = {
   grille: grilleLook((g, w) => { g.fillStyle = '#3d4046'; g.fillRect(0, 4, w, 5); g.fillRect(0, 20, w, 5); }),                 // horizontal bars
   mesh: grilleLook((g, w, h) => { g.strokeStyle = '#34373c'; g.lineWidth = 2.5; for (const x of [-16, 0, 16, 32]) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 16, h); g.moveTo(x + 16, 0); g.lineTo(x, h); g.stroke(); } }),   // diamond mesh
 };
-const LIFT = 0.004;     // metres a part stands off the skin
+export const LIFT = 0.004;     // metres a part stands off the skin
 const TILE = 0.04;      // metres of car covered by one copy of a grille picture
 
 /**
@@ -102,7 +102,7 @@ export function buildEndParts(surface, parts, extra = {}) {
           if (part.frame !== false) pile('black', layer, patch(surface, tail, grown(rows, 0.012), null, side));
           pile(part.is === 'signal' ? (side > 0 ? 'signalR' : 'signalL') : part.is, layer + 0.5, patch(surface, tail, rows, bounds, side));
         } else {
-          pile(part.is, layer, patch(surface, tail, rows, null, side));
+          pile(part.is, layer, patch(surface, tail, rows, null, side, part.raise));
         }
       }
     }
@@ -139,17 +139,19 @@ export function buildSideParts(surface, parts, extra = {}) {
   });
   return meshes;
 }
-function sidePatch(surface, rows, side) {
+export function sidePatch(surface, rows, side) {
   // Columns every 1 % of the car's length, eight steps up each: small triangles that hug the body.
-  const columns = [];
+  // (a supercar body bends sharply where the wing meets the cabin and round its wheel arches: finer
+  // columns and more steps there, or the part cuts the corners and sinks into the skin)
+  const every = surface.sculpted ? 0.005 : 0.01, columns = [];
   rows.forEach((row, k) => {
     if (k > 0) {
-      const before = rows[k - 1], pieces = Math.max(1, Math.ceil((row[0] - before[0]) / 0.01));
+      const before = rows[k - 1], pieces = Math.max(1, Math.ceil((row[0] - before[0]) / every));
       for (let i = 1; i < pieces; i++) columns.push(before.map((value, m) => lerp(value, row[m], i / pieces)));
     }
     columns.push(row);
   });
-  const up = 8, positions = [], uvs = [], index = [];
+  const up = surface.sculpted ? 20 : 8, positions = [], uvs = [], index = [];
   for (const [t, low, high] of columns) {
     for (let r = 0; r <= up; r++) {
       const point = surface.at(clamp(t, 0, 1), lerp(U.sill, U.shoulder, lerp(low, high, r / up)), side, LIFT);
@@ -173,7 +175,7 @@ function sidePatch(surface, rows, side) {
 
 // ---- Outlines ---------------------------------------------------------------------------
 // Every outline becomes rows of [s, bottom, top], in order of s.
-function rowsOf(part) {
+export function rowsOf(part) {
   if (part.rows) return part.rows;
   const c = part.circle;
   const [from, to, bottom, top] = c ? [c[0] - c[2], c[0] + c[2], c[1] - c[2], c[1] + c[2]] : part.box;
@@ -194,7 +196,10 @@ function grown(rows, by) {
 // ---- One part laid on the skin -----------------------------------------------------------
 // bounds = [from, to, bottom, top] the picture is stretched over (lamps), or null to repeat
 // it every TILE metres (grilles).     side = +1 right half, -1 its mirror image.
-function patch(surface, tail, rows, bounds, side) {
+// raise (optional, "raise" in car.json): metres the part stands out from the body, like the
+// raised chrome surround of a grille. It then gets a wall all round its edge, down to the skin.
+// apart: true = hand back [top, wall] separately (a lamp cover: clear glass on a dark edge).
+export function patch(surface, tail, rows, bounds, side, raise = 0, apart = false) {
   // Columns every two centimetres along s, the same number of steps up each column (small
   // triangles, so the part hugs the curve of the body).
   const columns = [];
@@ -238,5 +243,46 @@ function patch(surface, tail, rows, bounds, side) {
     if (lost(from)) normal.setXYZ(i, 0, 0, tail ? 1 : -1); else if (from !== i) normal.setXYZ(i, normal.getX(from), normal.getY(from), normal.getZ(from));
     position.setXYZ(i, position.getX(i) + normal.getX(i) * LIFT, position.getY(i) + normal.getY(i) * LIFT, position.getZ(i) + normal.getZ(i) * LIFT);
   }
-  return geometry;
+  if (!raise) return geometry;
+  for (let i = 0; i < position.count; i++) {
+    position.setXYZ(i, position.getX(i) + normal.getX(i) * raise, position.getY(i) + normal.getY(i) * raise, position.getZ(i) + normal.getZ(i) * raise);
+  }
+  const wall = raisedWall(geometry, columns, up, raise, side);
+  return apart ? [geometry, wall] : mergeGeometries([geometry, wall]);
+}
+
+// The wall round the edge of a raised part: from its outline down `raise` metres to the skin.
+// (A part that starts on the centre line joins its mirror image there, so it has no wall at s = 0.)
+function raisedWall(geometry, columns, up, raise, side) {
+  const position = geometry.attributes.position, normal = geometry.attributes.normal;
+  const at = (c, r) => c * (up + 1) + r, last = columns.length - 1;
+  // Each point of the outline, with a point next to it just inside the part (to tell "out" from "in").
+  const outline = [], inside = [];
+  const step = (i, j) => { outline.push(i); inside.push(j); };
+  const lower = Math.max(0, up - 1), upper = Math.min(up, 1), back = Math.max(0, last - 1), on = Math.min(last, 1);
+  for (let c = 0; c <= last; c++) step(at(c, up), at(c, lower));               // along the top
+  for (let r = up - 1; r >= 0; r--) step(at(last, r), at(back, r));            // down the far end
+  for (let c = last - 1; c >= 0; c--) step(at(c, 0), at(c, upper));            // back along the bottom
+  const closed = columns[0][0] > 0;
+  if (closed) for (let r = 1; r <= up; r++) step(at(0, r), at(on, r));         // up the near end
+  const positions = [], normals = [], uvs = [];
+  const top = (i) => new THREE.Vector3().fromBufferAttribute(position, i);
+  const foot = (i) => top(i).addScaledVector(new THREE.Vector3().fromBufferAttribute(normal, i), -raise);
+  for (let k = 0; k < outline.length - (closed ? 0 : 1); k++) {
+    const i = outline[k], j = outline[(k + 1) % outline.length];
+    const [a, b, c, d] = [top(i), top(j), foot(i), foot(j)];
+    // Facing out: away from the points just inside the part here (not from its middle, which on a
+    // long thin part such as a pointed lamp can lie almost beside the edge).
+    const out = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().fromBufferAttribute(normal, i)).normalize();
+    const within = top(inside[k]).add(top(inside[(k + 1) % inside.length])).multiplyScalar(0.5);
+    if (out.dot(new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5).sub(within)) < 0) out.negate();
+    const quad = new THREE.Vector3().subVectors(c, a).cross(new THREE.Vector3().subVectors(b, a)).dot(out) > 0 ? [a, c, b, b, c, d] : [a, b, c, b, d, c];
+    for (const p of quad) { positions.push(p.x, p.y, p.z); normals.push(out.x, out.y, out.z); uvs.push(0, 0); }
+  }
+  const wall = new THREE.BufferGeometry();
+  wall.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  wall.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  wall.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  wall.setIndex([...Array(positions.length / 3).keys()]);
+  return wall;
 }
