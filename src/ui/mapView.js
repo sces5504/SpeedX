@@ -2,8 +2,11 @@
 // mapView.js — draws the road as a 2D map: a small round minimap that follows
 // you, and a full-screen map (press M) of the whole highway. Every place has
 // its own sign (ui/mapIcons.js): fuel, rest stop, turnout, garage, dealership,
-// speed camera. On the full map click a stop to travel there; under each stop and
-// camera are the stars the player has there (a stop's are its time attack's).
+// speed camera. On the full map click a stop to travel there.
+// STARS belong to ACTIVITIES only - a speed camera, a time attack - never to a place.
+// A camera's are under its name. A stop is not an activity, so it has none of its own:
+// the time attack that starts from its cone is shown under the stop's name as a small
+// stopwatch sign with that run's stars after it.
 // Also: the little route pictures on the map cards of the main menu.
 // ---------------------------------------------------------------------------
 import { MAP_ICONS, drawMapIcon } from './mapIcons.js';
@@ -63,7 +66,6 @@ export function createMapView(map, onPickPoi, onPickPlace) {
   // The legend under the full map: every sign and what it means.
   const legend = document.getElementById('map-legend');
   for (const [kind, icon] of Object.entries(MAP_ICONS)) {
-    if (kind === 'timeAttack') continue;                       // (every stop has a time attack: its stars are under the stop)
     const item = document.createElement('span'), picture = document.createElement('canvas');
     picture.width = picture.height = 44;
     drawMapIcon(picture.getContext('2d'), kind, 22, 22, 40);
@@ -100,22 +102,26 @@ export function createMapView(map, onPickPoi, onPickPlace) {
       const [x, y] = toScreen(goal.x, goal.z);
       ctx.fillStyle = routeColor; ctx.beginPath(); ctx.arc(x, y, labels ? 8 : 5, 0, 7); ctx.fill();
     }
-    // Places: each with its own sign; on the full map also its name and the stars the player has there.
+    // Places: each with its own sign; on the full map also its name, and the stars of the ACTIVITY there.
+    // activity = which activity the stars are for. `own` = the place itself is that activity (a camera): just
+    // the stars. Otherwise (a stop, where a time attack starts) the activity's small sign stands before them.
     const pixel = labels ? devicePixelRatio : 1;
-    const caption = (x, y, name, count, color) => {
+    const caption = (x, y, name, count, activity, own) => {
+      const left = x + 20 * pixel, color = MAP_ICONS[activity].color;
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#e8f2ea'; ctx.font = `${13 * pixel}px Menlo, monospace`; ctx.fillText(name, x + 20 * pixel, y - 1 * pixel);
-      ctx.fillStyle = color; ctx.font = `${11 * pixel}px Menlo, monospace`; ctx.fillText(stars(count), x + 20 * pixel, y + 13 * pixel);
+      ctx.fillStyle = '#e8f2ea'; ctx.font = `${13 * pixel}px Menlo, monospace`; ctx.fillText(name, left, y - 1 * pixel);
+      if (!own) drawMapIcon(ctx, activity, left + 7 * pixel, y + 9.5 * pixel, 14 * pixel);
+      ctx.fillStyle = color; ctx.font = `${11 * pixel}px Menlo, monospace`; ctx.fillText(stars(count), left + (own ? 0 : 17 * pixel), y + 13 * pixel);
     };
     for (const camera of cameras) {
       const [x, y] = toScreen(camera.x, camera.z);
       drawMapIcon(ctx, 'camera', x, y, labels ? 24 * pixel : 13);
-      if (labels) caption(x, y, camera.name, camera.stars, MAP_ICONS.camera.color);
+      if (labels) caption(x, y, camera.name, camera.stars, 'camera', true);
     }
     for (const poi of map.pois) {
       const [x, y] = toScreen(road.x[poi.index], road.z[poi.index]);
       drawMapIcon(ctx, poi.type, x, y, labels ? 30 * pixel : 16);
-      if (labels) caption(x, y, poi.name, stopStars(poi), MAP_ICONS.timeAttack.color);
+      if (labels) caption(x, y, poi.name, stopStars(poi), 'timeAttack', false);
     }
     if (challenge) {
       const [x, y] = toScreen(challenge.x, challenge.z);

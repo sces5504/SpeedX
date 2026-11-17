@@ -130,12 +130,13 @@ export const GAMEPLAY = {
   speedLimit: 22,          // 22 m/s ≈ 80 km/h, what normal traffic drives
   nearMissGap: 1.3,        // side gap (m) that counts as a near miss
   nearMissMinSpeed: 16,    // you must be going at least this fast (m/s)
-  nearMissBonus: 0.25,     // seconds removed from the clock
+  nearMissBonus: 0.25,     // seconds a near miss gives back in a time attack
   nearMissOncomingBonus: 0.5,
-  crashPenalty: 1.0,       // seconds added for a hard hit during a challenge
+  crashPenalty: 1.0,       // seconds a hard hit costs in a time attack
   idleShutOff: 3,          // seconds standing still before the engine switches off
   knockoutSpeed: 17,       // m/s (~60 km/h) INTO an obstacle before the black-and-white slow-motion crash plays
   raceLength: 2400,        // metres for a race against a rival
+  rollingStartRoom: 300,   // metres of road a Blacklist race's rolling start needs ahead of it (it covers about 185; the rest is room to brake for what comes next)
   challengeLength: 3000,   // metres for a time-attack run
 };
 

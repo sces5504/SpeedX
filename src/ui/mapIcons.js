@@ -25,7 +25,7 @@ export const MAP_ICONS = {
     path: 'M3.5 15.5v-3l2.6-.7L8.4 8h6.4l3.1 3.8 2.6.7v3h-1.6M8.9 15.5h6.2M3.5 15.5h1.6M7 15.5m-1.9 0a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0M17 15.5m-1.9 0a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0' },
   camera: { color: '#ffb000', label: 'SPEED CAMERA',            // a camera on its pole
     path: 'M5 7h9v6H5zM14 9l4.5-2v6L14 11M9.5 13v7M7 20h5' },
-  timeAttack: { color: '#57ff9a', label: 'TIME ATTACK',         // a stopwatch
+  timeAttack: { color: '#57ff9a', label: 'TIME ATTACK',         // a stopwatch (not a place: the run that starts from the cone at a stop)
     path: 'M12 14m-6 0a6 6 0 1 0 12 0a6 6 0 1 0-12 0M12 14v-3.5M10 4h4M12 4v4' },
 };
 

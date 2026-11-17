@@ -3,14 +3,17 @@
 //
 //  NEAR MISS   Pass another car closer than ~1.3 m at speed without touching
 //              it. Oncoming cars count double.
-//  TIME ATTACK Press E at an orange cone to start a timed run to a finish
-//              gate ~3 km up the road. Every near miss takes time OFF the
-//              clock; every hard crash adds a penalty. Risk versus reward.
+//  TIME ATTACK Press E at an orange cone: a route to a finish gate ~3 km up the
+//              road, to be driven WITHIN THE TIME. The HUD counts the time left
+//              down. Every near miss gives a little time back; every hard crash
+//              takes some away. Run out of time before the gate and the run is over.
 //
 // A TIME ATTACK IS AN ACTIVITY WITH STARS, like a speed camera (game/speedTraps.js):
-//   * The clock at the gate earns one, two or three stars. The times asked for come from an
-//     AVERAGE SPEED per star (career.json: "timeAttack" -> "kmh"; a map may give its own in
-//     map.json: "timeAttack": { "kmh": [..] }), so they fit whatever the length of the run is.
+//   * There are three time limits: reach the gate inside the longest for one star, the middle
+//     one for two, the shortest for three. The clock running past the longest = TIME UP: the run
+//     has failed (challenge.result.timeUp). The limits come from an AVERAGE SPEED per star
+//     (career.json: "timeAttack" -> "kmh"; a map may give its own in map.json:
+//     "timeAttack": { "kmh": [..] }), so they fit whatever the length of the run is.
 //   * For each run (a stop's cone, in one direction) the save file keeps the best time and the
 //     most stars (save.data.career.timeAttacks). A star level reached for the first time pays
 //     reputation and money - once (career.awardStars).
@@ -61,7 +64,7 @@ export function createChallenge(scene, map) {
     time: 0, bonus: 0, penalty: 0, nearMisses: 0,
     startS: 0, finishS: 0, dir: 1, id: '', best: null, finishedTimer: 0,
     targets: [],              // the clock (seconds) that earns one, two and three stars on this run
-    result: null,             // the run that just ended: { time, stars, newStars, reputation, money, newBest, best } - main.js takes it (and sets it back to null)
+    result: null,             // the run that just ended: { time, stars, newStars, reputation, money, newBest, best } - or { timeUp: true, short (metres left) } - main.js takes it (and sets it back to null)
     combo: 0, comboTimer: 0,  // near misses in quick succession
     showGate, hideGate() { gate.visible = false; },
     // The most stars the player has at a stop's cone (the better of its two directions): for the map screen.
@@ -87,6 +90,8 @@ export function createChallenge(scene, map) {
       for (let stars = 3; stars >= 1; stars--) if (challenge.clock <= challenge.targets[stars - 1]) return { stars, time: challenge.targets[stars - 1] };
       return null;
     },
+    // Seconds left to reach the gate for that star: what the HUD counts down.
+    get timeLeft() { const next = challenge.nextTarget; return next ? next.time - challenge.clock : 0; },
 
     crash() { if (challenge.state === 'running') challenge.penalty += GAMEPLAY.crashPenalty; },
 
@@ -101,6 +106,7 @@ export function createChallenge(scene, map) {
         challenge.progress += map.ahead(challenge.lastS, playerS) * challenge.dir;
         challenge.lastS = playerS;
         if (challenge.progress >= challenge.length) finish();
+        else if (challenge.clock > challenge.targets[0]) timeUp();   // not even one star's time is left
         else if (challenge.progress < -150) challenge.cancel();   // drove off the other way
       } else if (challenge.state === 'finished') {
         challenge.finishedTimer -= dt;
@@ -139,6 +145,11 @@ export function createChallenge(scene, map) {
     },
   };
 
+  // The time ran out before the gate: the run is over, with nothing to show for it.
+  function timeUp() {
+    challenge.result = { timeUp: true, short: Math.round(challenge.remaining) };
+    challenge.cancel();
+  }
   // The gate has been reached: the clock stops, the stars are counted, and anything new is paid and saved.
   function finish() {
     const time = challenge.clock, record = recordOf(challenge.id);

@@ -78,9 +78,9 @@ const map = {
   signs: 'tw',
   // Speed cameras: the speeds (km/h) that earn one, two and three stars.
   speedCameras: [
-    { id: 'avenue', road: 'avenue', s: 900, name: 'Avenue', stars: [110, 150, 190] },
-    { id: 'ring-east', s: 1950, name: 'Ring East', stars: [100, 135, 170] },
-    { id: 'cross', road: 'cross', s: 620, name: 'Cross Street', stars: [80, 110, 140] },
+    { id: 'avenue', road: 'avenue', s: 900, name: 'Avenue', stars: [150, 200, 250] },
+    { id: 'ring-east', s: 1950, name: 'Ring East', stars: [130, 175, 220] },
+    { id: 'cross', road: 'cross', s: 620, name: 'Cross Street', stars: [105, 145, 185] },
   ],
   // Traffic lights at the crossroads in the middle and where the avenue meets the ring.
   signalJunctions: [[0, 0], [-HALF_X, 0], [HALF_X, 0]],

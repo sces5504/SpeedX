@@ -444,7 +444,16 @@ function showSpeedCamera({ camera, kmh, stars, newStars, reputation, money, newB
   audio.beep(stars ? 1320 : 660, 0.25, 0.1);
   const earned = [newStars ? `+${reputation} REPUTATION · +$${money.toLocaleString()}` : '', newBest && !newStars ? 'NEW BEST' : ''].filter(Boolean);
   hud.banner(`${kmh} KM/H`, [`${camera.name.toUpperCase()} · ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}`, ...earned].join(' · '), 4, stars ? '#57ff9a' : '#ffd166');
-  replay.mark('speed camera', time);
+  replay.mark('speed camera', time, { trap: camera });       // (the replay has a shot of the pole, and fires its flash again)
+}
+// How much open ground the player's car has to its left and to its right, in metres, as its driver
+// sees it: up to the guardrail, or to the wall on the median. (A replay stands its roadside cameras within it.)
+function roomBeside() {
+  const way = player.way, { road } = way, i = way.indexAt(player.s);
+  const d = player.d * playerDirection(), edge = road.barrier[i] - 0.6;      // d = metres to the right of the centre line, for this driver
+  let left = edge + d, right = edge - d;
+  if (road.wall[i] === 1) { const wall = road.median[i] + 0.8; if (d > 0) left = d - wall; else right = -d - wall; }
+  return [Math.max(0, left), Math.max(0, right)];
 }
 let replayGate = null;                    // where the finish gate of the last race or time attack stood: { s, way } (a replay shows it again)
 let replayRush = 0;                       // 0..1 how hard the picture streaks in the replay's present shot
@@ -475,6 +484,8 @@ function endReplay() {
 function updateReplay(dt) {
   const sound = input.wasPressed('handbrake') || input.wasPressed('pause') || input.wasPressed('interact') ? null : replay.step(dt, rig.camera);
   if (!sound) { endReplay(); return; }
+  if (sound.flash) traps.fire(sound.flash);                   // the film has reached the speed camera: its flash goes off again
+  traps.glow(dt);
   replayLook.follow(rig.camera, sound.hero);
   replayRush = sound.rush;
   player.interior.group.visible = false;
@@ -577,10 +588,11 @@ function updateBlacklist(dt) {
 }
 // A Blacklist driver is challenged: they come to the player, here and now. First their own
 // introduction (game/blacklistIntros.js), then the start of the race.
+// Returns false if no race can start here (there is not enough road ahead, or one is running).
 function challengeDriver(entry) {
   setPaused(false);
   const info = playerInfo(), boss = rivals.bring(entry, info);
-  if (!rivals.challenge(entry, info)) { hud.popup(rivals.race.message || 'No room to race here', 'info'); return; }
+  if (!rivals.challenge(entry, info)) { hud.popup(rivals.race.message || 'No room to race here', 'info'); return false; }
   // (The race now stands at its countdown, which does not run during a scene.)
   const rank = career.blacklist.length - career.blacklist.indexOf(entry);
   director.fade(1, 0.3);
@@ -589,19 +601,25 @@ function challengeDriver(entry) {
     toRoad: () => { stage.hide(scene); draw(scene); },
     caption: director.caption, fade: director.fade,
   }), () => startBlacklistRace(entry, boss));
+  return true;
 }
 // The start of a Blacklist race is fair: a ROLLING START (game/scenes.js) in which the game drives
-// both cars side by side to the line. It cannot be skipped. Where the road ahead is too short for
-// that, the race starts the way a street race does (a rolling 3-2-1, the car in the player's hands).
+// both cars side by side to the line. It cannot be skipped.
+// The run-up needs GAMEPLAY.rollingStartRoom metres of this road. Where the road ends sooner than
+// that (close to a T-junction on a road network), both cars are set down further back along it, so
+// the start is the same everywhere. Only on a road shorter than the run-up itself does the race
+// start the way a street race does (a rolling 3-2-1, the car in the player's hands).
 function startBlacklistRace(entry, boss) {
   const way = player.way, dir = playerDirection();
-  if (way.roomAhead(player.s, dir) < 420) { resumeDriving(); return; }
+  const missing = GAMEPLAY.rollingStartRoom - way.roomAhead(player.s, dir);      // (a loop never runs out of road)
+  if (missing > way.roomAhead(player.s, -dir)) { resumeDriving(); return; }
+  const s = missing > 0 ? way.wrap(player.s - dir * missing) : player.s;
   // Nobody may be in the way: traffic on the stretch ahead is taken off the road (it comes back further on).
   for (const ai of traffic.cars) {
-    const ahead = way.ahead(player.s, ai.s) * dir;
+    const ahead = way.ahead(s, ai.s) * dir;
     if (ai.active && ai.way === way && ahead > -20 && ahead < 320) removeAi(ai);
   }
-  playScene(rollingStart(entry, player, boss, { way, dir, s: player.s }, {
+  playScene(rollingStart(entry, player, boss, { way, dir, s }, {
     caption: director.caption, big: director.big,
     beep: (pitch) => audio.beep(pitch, 0.15),
     // Filmed from outside, the two cars are lit as a replay is (render/replayLook.js); behind the wheel, as always.
@@ -668,7 +686,7 @@ function updateDriving(dt) {
       audio.crash(big);
       slowMo = 0.6 * FEEL.crashFx;
     }
-    if (speed > 6 && challenge.state === 'running') { challenge.crash(); hud.popup(`CRASH +${GAMEPLAY.crashPenalty.toFixed(1)}s`, 'bad'); }
+    if (speed > 6 && challenge.state === 'running') { challenge.crash(); hud.popup(`CRASH -${GAMEPLAY.crashPenalty.toFixed(1)}s`, 'bad'); }
   };
   if (player.lastImpact) {
     const hit = player.lastImpact;
@@ -693,7 +711,7 @@ function updateDriving(dt) {
   // 5. Near misses, time attack, races
   for (const miss of challenge.detectNearMisses(player, aiCars, time)) {
     const text = (miss.oncoming ? 'HEAD-ON NEAR MISS' : 'NEAR MISS') + (miss.combo > 1 ? ` x${miss.combo}` : '');
-    hud.popup(challenge.state === 'running' ? `${text}  -${miss.bonus.toFixed(2)}s` : text, 'good');
+    hud.popup(challenge.state === 'running' ? `${text}  +${miss.bonus.toFixed(2)}s` : text, 'good');
     audio.beep(miss.oncoming ? 1320 : 990, 0.18, 0.1);
   }
   // Whoosh as cars go by (timed so its loudest moment is when they are closest), horns, tyre spray.
@@ -728,7 +746,7 @@ function updateDriving(dt) {
   // Speed cameras, and the recording a replay is cut from (game/speedTraps.js, game/replay.js).
   const caught = traps.update(player, dt);
   if (caught) showSpeedCamera(caught);
-  replay.record(dt, time, player, aiCars);
+  replay.record(dt, time, player, aiCars, roomBeside());
   if (replay.ready && (replay.ready.until ??= time + 12) < time) replay.ready = null;          // the offer stands for twelve seconds
   if (replay.ready && input.wasPressed('replay')) startReplay();
   updateRaceHud();
@@ -752,8 +770,9 @@ function updateDriving(dt) {
 
   // 7. HUD
   const timerInfo = { visible: false, text: '', extra: '' };
-  if (challenge.state === 'running') Object.assign(timerInfo, { visible: true, text: formatTime(challenge.clock),
-    extra: `${Math.round(challenge.remaining)} m` + (challenge.nextTarget ? `  ${'★'.repeat(challenge.nextTarget.stars)} ${formatTime(challenge.nextTarget.time)}` : '') });
+  // A time attack: the time LEFT to reach the gate, counting down, and the stars that time is for.
+  if (challenge.state === 'running') Object.assign(timerInfo, { visible: true, text: formatTime(challenge.timeLeft),
+    extra: `${Math.round(challenge.remaining)} m to the gate` + (challenge.nextTarget ? `  ${'★'.repeat(challenge.nextTarget.stars)}${'☆'.repeat(3 - challenge.nextTarget.stars)}` : '') });
   else if (race.state === 'racing') Object.assign(timerInfo, { visible: true, text: formatTime(race.timer),
     extra: `${race.playerProgress >= race.rivalProgress ? 'AHEAD' : 'BEHIND'} ${Math.abs(race.playerProgress - race.rivalProgress).toFixed(0)} m · ${Math.max(0, race.length - race.playerProgress).toFixed(0)} m to go` });
   hud.update(dt, { vehicle: v, lightMode: player.flashing ? 2 : player.lightMode, timer: timerInfo,
@@ -812,7 +831,7 @@ function updateRaceHud() {
       challenge.hideGate(); race.message = '';
       // The finish can be watched again. (A race is called 10 m before its gate: the moment marked is the car reaching it.)
       replayGate = { s: race.finish.s, way: race.finish.way };
-      replay.mark('race', time + (race.playerWon ? 10 / Math.max(12, player.vehicle.speed) : 0), race.playerWon);
+      replay.mark('race', time + (race.playerWon ? 10 / Math.max(12, player.vehicle.speed) : 0), { finish: race.playerWon });
     }
     if (race.state === 'none' && lastRaceState !== 'done' && activities.current?.kind !== 'timeAttack') activities.cancel();
     lastRaceState = race.state;
@@ -824,11 +843,16 @@ function updateRaceHud() {
   if (challenge.result) {
     const run = challenge.result;
     challenge.result = null;
+    if (run.timeUp) {                                          // the time ran out before the gate
+      hud.banner('TIME UP', `TIME ATTACK · ${run.short} m short of the gate`, 4, '#ff5148');
+      audio.beep(330, 0.5);
+      return;
+    }
     const earned = run.newStars ? `+${run.reputation} REPUTATION · +$${run.money.toLocaleString()}` : run.newBest ? 'NEW BEST' : `best ${formatTime(run.best)}`;
     hud.banner(formatTime(run.time), [`TIME ATTACK · ${'★'.repeat(run.stars)}${'☆'.repeat(3 - run.stars)}`, earned, `${challenge.nearMisses} near misses`].join(' · '), 6, run.stars ? '#57ff9a' : '#ffd166');
     audio.beep(1320, 0.5);
     replayGate = { s: challenge.finishS, way: map.ways[0] };
-    replay.mark('time attack', time, true);                    // the run to the gate can be watched again
+    replay.mark('time attack', time, { finish: true });                    // the run to the gate can be watched again
   }
 }
 
@@ -854,8 +878,8 @@ function updateInteraction(v) {
   else if (found.type === 'dealer') enterDealer(found.object);
   else if (rivals.race.state === 'none') {
     if (challenge.start(found.poi, mainRoadS(), playerDirection())) {
-      // What the clock must show at the gate for one, two and three stars.
-      hud.banner('TIME ATTACK', challenge.targets.map((seconds, k) => `${'★'.repeat(k + 1)} ${formatTime(seconds)}`).join('   '), 4, '#ffd166');
+      // The time there is to reach the gate, for one, two and three stars.
+      hud.banner('REACH THE GATE IN TIME', challenge.targets.map((seconds, k) => `${'★'.repeat(k + 1)} ${formatTime(seconds)}`).join('   '), 4, '#ffd166');
       audio.beep(880, 0.3);
     }
     else hud.popup('Not enough road that way — turn around', 'info');
@@ -1074,7 +1098,7 @@ function preview(id) {
 // The developer console (the ~ key): its window is ui/devConsole.js, its commands game/devCommands.js.
 const devConsole = createDevConsole();
 addDevCommands(devConsole, {
-  map, net, nav, weather, sky, hud, travelTo, teleport, playerInfo, setDestination,
+  map, net, nav, weather, sky, hud, travelTo, teleport, playerInfo, setDestination, challengeDriver,
   player: () => player, rivals: () => rivals, driving: () => state === 'driving',
   // Another car, there and then: on the road it keeps your place; its engine is the one you hear.
   switchCar: (carId) => { spawnPlayer(carId); if (state === 'driving') audio.start(soundOf(player.spec)); },

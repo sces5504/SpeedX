@@ -101,7 +101,8 @@ export function addDevCommands(devConsole, game) {
     const entry = career.blacklist.find((e) => e.id === (name || '').toLowerCase());
     if (!entry) return career.blacklist.map((e) => `${e.id}: ${e.name}, asks for ${e.reputation} reputation${career.hasBeaten(e) ? ' (beaten)' : ''}`).join('\n');
     mustBeDriving();
-    return game.rivals().challenge(entry, game.playerInfo()) ? `${entry.name} is behind you. Countdown started.` : game.rivals().race.message || 'No race could start here.';
+    // (The whole of it, as from the Blacklist screen: their introduction, the rolling start, the race.)
+    return game.challengeDriver(entry) ? `${entry.name} is coming. Close the console to watch.` : game.rivals().race.message || 'No race could start here.';
   });
   add('win', '', 'win the race you are in, now', () => {
     return game.rivals().winNow() ? 'You win.' : 'You are not in a race (wait for GO).';

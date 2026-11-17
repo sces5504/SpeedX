@@ -200,10 +200,12 @@ their car is yours. HOW TO PLAY (main menu, pause menu) says the same to the pla
 - **Stars.** Two activities give one to three stars, and both pay the same way - each level once, the first
   time it is reached, skipped levels included (`career.awardStars`):
   - **Speed cameras** (`"speedCameras"` in map.json; `src/game/speedTraps.js`): the speed you pass at.
-  - **Time attacks** (the orange cone at every stop; `src/game/challenge.js`): the clock at the gate. The
-    times asked for come from an average speed per star (`"timeAttack": { "kmh": [..] }` in career.json, or
+  - **Time attacks** (the orange cone at every stop; `src/game/challenge.js`): a route to be driven within
+    the time. The HUD counts the time left down; three limits give one, two and three stars, and running
+    past the longest is TIME UP - the run has failed. The limits come from an average speed per star (`"timeAttack": { "kmh": [..] }` in career.json, or
     in a map's map.json for that map), so they fit any length of run.
-  The map screen shows the stars you have under each camera and each stop.
+  The map screen shows stars for activities only: a camera's under its name, and a stop's time attack as a
+  small stopwatch sign with its stars (the stop itself - a garage, a pump - is a place, and has none).
 - **Street racers** in reach are announced: when one is close enough and going your way, the HUD says
   "F - flash your lights to race" with their car and its rating (`race.inReach`, `src/ai/rivals.js`).
 - **The Blacklist screen** (`src/ui/blacklist.js`; main menu and pause menu): the drivers down the left, the
@@ -213,7 +215,9 @@ their car is yours. HOW TO PLAY (main menu, pause menu) says the same to the pla
   1. the driver's own **introduction** (`src/game/blacklistIntros.js` - every driver has one; `"intro"` in
      career.json names it; it can be skipped);
   2. a **rolling start** (`rollingStart` in `src/game/scenes.js`): the game drives both cars side by side
-     to the line, 3-2-1 - nobody can gain anything before GO. It cannot be skipped;
+     to the line, 3-2-1 - nobody can gain anything before GO. It cannot be skipped. It needs
+     `GAMEPLAY.rollingStartRoom` metres of the road the player is on; close to that road's end (a
+     T-junction) the two cars are set down further back along it, so it plays everywhere;
   3. the race, to a gate. Street racers never drive a Blacklist driver's car.
   To add a driver: `.claude/skills/speedx-blacklist`.
 - **Garages and dealerships are places.** Two more kinds of stop (`"type": "garage"` / `"dealer"` in a map's
@@ -234,9 +238,12 @@ their car is yours. HOW TO PLAY (main menu, pause menu) says the same to the pla
   again, so the opening plays once more.)
 - **Replays** (`src/game/replay.js`): a replay is not a script or a video but a RECORDING OF WHERE THE CARS
   WERE - thirty times a second, the last 14 seconds, in memory only. After a speed camera, a race or a
-  time attack, press R: the clip is cut into shots chosen for speed (cameras standing low at the roadside
-  that the car blasts past, cameras bolted low on the car), the finish gate is shown again, and only the
-  last instant before a finish line plays in slow motion. A replay is lit like a night shoot
+  time attack, press R: the clip is cut into shots - and cut afresh every time, the cameras, their order,
+  where they stand and how long each runs all drawn by lot (roadside tripods the car blasts past, a long
+  lens down a straight, a crane, a camera car, cameras bolted low on the car). Only the moment itself has
+  a camera of its own: a speed camera gets one that stands dead still with the pole in its picture as the
+  car goes through and the flash fires; a finish gets one looking back through the gate, the last instant
+  before the line in slow motion (the only slow motion there is). A replay is lit like a night shoot
   (`src/render/replayLook.js`, `GRAPHICS.replay`): fill light, softer headlights. Driving is not touched.
   Only the 3D models are moved, so the game carries on exactly where it was.
 - **Drift** (`PHYSICS.drift` in config.js; steps 4b and 6b of `src/vehicles/vehiclePhysics.js`): what SPACE
