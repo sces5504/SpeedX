@@ -74,6 +74,7 @@ export const ENGINE_PROFILES = {
   turbo4: { voice: 'i4', firing: 2, pitch: 1.00, tone: 3000, drive: 1.6, buzz: 0.10, order: 1.0, turbo: 1.0, backfire: [0.85, 0.35], volume: 1.0 },      // SR20DET
   vtec4:  { voice: 'i4', firing: 2, pitch: 1.18, tone: 4800, drive: 1.3, buzz: 0.18, order: 2.0, turbo: 1.0, backfire: [0.5, 0.12], volume: 0.95 },   // K20A: higher and harder than the 4A-GE, screams to 8600
   na4:    { voice: 'i4', firing: 2, pitch: 1.12, tone: 4200, drive: 1.2, buzz: 0.22, order: 2.0, turbo: 1.0, backfire: [0.5, 0.12], volume: 0.95 },   // 4A-GE: revvy, induction rasp
+  big4:   { voice: 'i4', firing: 2, pitch: 0.94, tone: 3400, drive: 1.5, buzz: 0.12, order: 1.0, turbo: 1.0, backfire: [0.4, 0.1], volume: 0.95, bass: 1.5 },   // H23A1 (no recording of its own: the i4 voice, lower and fuller - a big, lazy-revving four)
   race4:  { voice: 'i4race', firing: 2, pitch: 1.00, tone: 3600, drive: 2.4, buzz: 0.12, order: 1.0, turbo: 1.0, backfire: [0.7, 0.25], volume: 1.05 }, // M102 16-valve: big-bore bark
   boxer4: { voice: 'f4', firing: 2, pitch: 1.00, tone: 2800, drive: 1.7, buzz: 0.10, order: 0.5, turbo: 1.1, backfire: [0.85, 0.35], volume: 1.0 },    // EJ20: off-beat rumble
   // ---- sixes ----

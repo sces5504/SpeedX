@@ -1,0 +1,67 @@
+{
+  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json.",
+            "BODY KIT = one full set, after a real one (see reference.md): fitting it takes over the groups it lists in \"blocks\"."],
+  "groups": [
+    { "id": "bodyKit", "title": "BODY KIT", "options": [
+      { "id": "prelude-kit-jun", "blocks": ["frontBumper", "hood", "spoiler", "skirts"], "look": {
+        "lip": 0.075, "hood": {"vents": true}, "skirts": {"drop": 0.02, "out": 0.008},
+        "spoiler": {"airfoil": true, "rise": 0.3, "back": 0.13, "span": 0.92, "chord": 0.27, "angle": 0.1, "posts": 0.34, "trim": "paint"},
+        "nose": { "bumper": [
+          {"is": "signal", "rows": [[0.34, 0.332, 0.364], [0.6, 0.332, 0.366], [0.74, 0.336, 0.364], [0.78, 0.342, 0.36]]},
+          {"is": "black", "rows": [[0, 0.212, 0.262], [0.58, 0.212, 0.258], [0.74, 0.222, 0.25]]},
+          {"is": "mesh", "rows": [[0, 0.222, 0.254], [0.5, 0.222, 0.25], [0.64, 0.228, 0.246]]}
+        ] } } }
+    ] },
+    { "id": "frontBumper", "title": "FRONT BUMPER", "options": [
+      { "id": "prelude-front-lip", "look": { "lip": 0.08, "nose": { "bumper": [
+        {"is": "signal", "rows": [[0.34, 0.332, 0.364], [0.6, 0.332, 0.366], [0.74, 0.336, 0.364], [0.78, 0.342, 0.36]]},
+        {"is": "black", "rows": [[0, 0.212, 0.258], [0.66, 0.212, 0.254], [0.8, 0.224, 0.248]]}
+      ] } } },
+      { "id": "prelude-front-gt", "look": { "lip": 0.1, "nose": { "bumper": [
+        {"is": "black", "rows": [[0, 0.22, 0.36], [0.4, 0.22, 0.355], [0.5, 0.228, 0.34], [0.54, 0.24, 0.32]]},
+        {"is": "mesh", "rows": [[0, 0.232, 0.348], [0.38, 0.232, 0.343], [0.47, 0.238, 0.33], [0.5, 0.248, 0.316]]},
+        {"is": "black", "box": [0.6, 0.78, 0.24, 0.31], "round": 0.03},
+        {"is": "head", "circle": [0.69, 0.275, 0.026]},
+        {"is": "signal", "rows": [[0.58, 0.33, 0.346], [0.78, 0.33, 0.346]]}
+      ] } } }
+    ] },
+    { "id": "rearBumper", "title": "REAR BUMPER", "options": [
+      { "id": "prelude-rear-diffuser", "look": { "tail": { "bumper": [
+        {"is": "black", "rows": [[0, 0.2, 0.31], [0.55, 0.2, 0.305], [0.7, 0.21, 0.29]]},
+        {"is": "grille", "rows": [[0, 0.21, 0.296], [0.48, 0.21, 0.292], [0.62, 0.218, 0.282]]}
+      ] } } }
+    ] },
+    { "id": "headlights", "title": "HEADLIGHTS", "options": [
+      { "id": "prelude-head-black", "look": { "nose": { "lamps": [
+        {"piece": "lamp", "is": "head", "rows": [[0.258, 0.614, 0.656], [0.262, 0.607, 0.663], [0.27, 0.603, 0.667], [0.62, 0.603, 0.667], [0.638, 0.605, 0.665], [0.652, 0.611, 0.659], [0.662, 0.618, 0.652], [0.667, 0.625, 0.645]], "units": [[0.34, 0.635, 0.026], [0.44, 0.635, 0.026], [0.54, 0.635, 0.026], [0.605, 0.635, 0.012, "signal"]], "housing": "black", "cover": 0.012}
+      ] } } },
+      { "id": "prelude-head-slim", "look": { "headlights": {"x": 0.56, "y": 0.646, "w": 0.34, "h": 0.03}, "nose": { "lamps": [
+        {"is": "black", "rows": [[0.258, 0.614, 0.656], [0.262, 0.607, 0.663], [0.27, 0.603, 0.667], [0.62, 0.603, 0.667], [0.638, 0.605, 0.665], [0.652, 0.611, 0.659], [0.662, 0.618, 0.652], [0.667, 0.625, 0.645]]},
+        {"is": "head", "rows": [[0.28, 0.636, 0.656], [0.61, 0.636, 0.656], [0.64, 0.638, 0.654], [0.655, 0.641, 0.651]]},
+        {"is": "signal", "rows": [[0.28, 0.612, 0.624], [0.61, 0.612, 0.624]]}
+      ] } } }
+    ] },
+    { "id": "taillights", "title": "TAIL LIGHTS", "options": [
+      { "id": "prelude-tail-smoked", "look": { "tail": { "lamps": [
+        {"is": "smoked", "rows": [[0.44, 0.545, 0.572], [0.51, 0.545, 0.645], [0.59, 0.545, 0.73], [0.65, 0.545, 0.795], [0.7, 0.55, 0.82], [0.78, 0.56, 0.805], [0.85, 0.58, 0.755]]},
+        {"is": "brake", "rows": [[0.53, 0.6, 0.655], [0.59, 0.6, 0.715], [0.65, 0.6, 0.775], [0.7, 0.6, 0.8], [0.76, 0.605, 0.79]]},
+        {"is": "reverse", "rows": [[0.48, 0.552, 0.584], [0.62, 0.552, 0.586]]}
+      ] } } },
+      { "id": "prelude-tail-bar", "look": { "tail": { "lamps": [
+        {"is": "brake", "rows": [[0.44, 0.545, 0.572], [0.51, 0.545, 0.645], [0.59, 0.545, 0.73], [0.65, 0.545, 0.795], [0.7, 0.55, 0.82], [0.78, 0.56, 0.805], [0.85, 0.58, 0.755]]},
+        {"is": "signal", "rows": [[0.47, 0.55, 0.583], [0.63, 0.55, 0.585], [0.72, 0.555, 0.585]]},
+        {"is": "red", "box": [0, 0.44, 0.735, 0.758], "round": 0.006}
+      ] } } }
+    ] },
+    {"use": "apron"},
+    {"use": "diffuser"},
+    {"use": "skirts", "without": ["skirts-none"]},
+    {"use": "widebody"},
+    {"use": "canards"},
+    {"use": "hood"},
+    {"use": "exhaust"},
+    {"use": "spoiler"},
+    {"use": "livery"},
+    {"use": "rims"}
+  ]
+}

@@ -26,3 +26,14 @@ NOT the 2007 CCGT race car and not a Jesko — but performance is set to Jesko A
 
 ## Deliberate differences (fictional car)
 No badges or lettering; made-up brand (尖端科技) and name; the roof scoop is a pair of low ducts.
+
+## 2026-11-18 rework (after the user's annotated comparison with the official photos)
+- Official photos used: koenigsegg.com/model/ccgt1 (KG15-26 side, KG15-28 rear 3/4, KG15-38 / KG15-27 rear).
+- Wing line now rises steadily from the nose to the A-pillar (no hump-then-drop, which made the creases);
+  cowl raised to 0.785 m for that (driver's view margin ~0.22 m).
+- Side: a `scallop` (lower door curves in, deepening rearward) running into a slanted teardrop intake,
+  a thin ledge along its upper edge, a black skirt blade and a small black fin behind the intake.
+- Roof: a slim black (carbon) snorkel from the rear of the roof down onto the engine cover (`scoop` piece).
+- Rear wing lowered to 1.04 m (the photo shows ~1.1 m including the end plates).
+- Rows rebuilt on one shared t grid (stations, greenhouse, wingCrown) - misaligned rows made the panels wavy.
+- The user's final steer: "這樣太醜，你自己用好看一點" - clean surfaces come first; features are kept but softened.

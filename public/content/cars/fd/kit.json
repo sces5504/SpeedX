@@ -1,64 +1,118 @@
 {
-  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json."],
+  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json.",
+            "BODY KIT = one full set, after a real one (see reference.md): fitting it takes over the groups it lists in \"blocks\"."],
   "groups": [
+    { "id": "bodyKit", "title": "BODY KIT", "options": [
+      { "id": "fd-kit-aspec", "blocks": ["frontBumper", "skirts", "spoiler"], "look": {
+        "lip": 0.075,
+        "skirts": {"drop": 0.025, "out": 0.015},
+        "spoiler": {"airfoil": true, "rise": 0.22, "back": 0.12, "span": 0.96, "chord": 0.28, "angle": 0.1, "posts": 0.32, "trim": "paint"},
+        "nose": {
+          "bumper": [
+            {"is": "black", "rows": [[0, 0.2, 0.41], [0.3, 0.2, 0.41], [0.44, 0.25, 0.38]]},
+            {"is": "mesh", "rows": [[0, 0.22, 0.39], [0.28, 0.22, 0.39], [0.4, 0.26, 0.37]]},
+            {"is": "black", "box": [0.52, 0.74, 0.22, 0.36], "round": 0.04},
+            {"is": "signal", "box": [0.54, 0.72, 0.42, 0.445], "round": 0.01}
+          ]
+        }
+      } }
+    ] },
     { "id": "frontBumper", "title": "FRONT BUMPER", "options": [
-      { "id": "fd-front-aero", "look": { "lip": 0.06, "nose": { "bumper": [
-        {"is": "black", "rows": [[0, 0.2, 0.41], [0.3, 0.2, 0.41], [0.44, 0.25, 0.38]]},
-        {"is": "mesh", "rows": [[0, 0.22, 0.39], [0.28, 0.22, 0.39], [0.4, 0.26, 0.37]]},
-        {"is": "black", "box": [0.52, 0.74, 0.22, 0.36], "round": 0.04},
-        {"is": "signal", "box": [0.54, 0.72, 0.42, 0.445], "round": 0.01}
-      ] } } },
-      { "id": "fd-front-gt", "look": { "lip": 0.1, "nose": { "bumper": [
-        {"is": "black", "box": [0, 0.24, 0.2, 0.41], "round": 0.04},
-        {"is": "mesh", "box": [0, 0.21, 0.22, 0.39], "round": 0.03},
-        {"is": "black", "box": [0.3, 0.64, 0.2, 0.39], "round": 0.05},
-        {"is": "mesh", "box": [0.33, 0.61, 0.22, 0.37], "round": 0.04},
-        {"is": "signal", "box": [0.52, 0.7, 0.43, 0.455], "round": 0.01},
-        {"is": "black", "rows": [[0.7, 0.3, 0.316], [0.9, 0.35, 0.366]]},
-        {"is": "black", "rows": [[0.7, 0.4, 0.416], [0.9, 0.45, 0.466]]}
-      ] } } }
+      { "id": "fd-front-aero", "look": {
+        "lip": 0.06,
+        "nose": {
+          "bumper": [
+            {"is": "black", "rows": [[0, 0.2, 0.41], [0.3, 0.2, 0.41], [0.44, 0.25, 0.38]]},
+            {"is": "mesh", "rows": [[0, 0.22, 0.39], [0.28, 0.22, 0.39], [0.4, 0.26, 0.37]]},
+            {"is": "black", "box": [0.52, 0.74, 0.22, 0.36], "round": 0.04},
+            {"is": "signal", "box": [0.54, 0.72, 0.42, 0.445], "round": 0.01}
+          ]
+        }
+      } },
+      { "id": "fd-front-gt", "look": {
+        "lip": 0.1,
+        "nose": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.24, 0.2, 0.41], "round": 0.04},
+            {"is": "mesh", "box": [0, 0.21, 0.22, 0.39], "round": 0.03},
+            {"is": "black", "box": [0.3, 0.64, 0.2, 0.39], "round": 0.05},
+            {"is": "mesh", "box": [0.33, 0.61, 0.22, 0.37], "round": 0.04},
+            {"is": "signal", "box": [0.52, 0.7, 0.43, 0.455], "round": 0.01},
+            {"is": "black", "rows": [[0.7, 0.3, 0.316], [0.9, 0.35, 0.366]]},
+            {"is": "black", "rows": [[0.7, 0.4, 0.416], [0.9, 0.45, 0.466]]}
+          ]
+        }
+      } }
     ] },
     { "id": "rearBumper", "title": "REAR BUMPER", "options": [
-      { "id": "fd-rear-diffuser", "look": { "tail": { "bumper": [
-        {"is": "black", "box": [0, 0.74, 0.19, 0.37], "round": 0.03},
-        {"is": "grille", "box": [0, 0.58, 0.205, 0.345], "round": 0.02}
-      ] } } },
-      { "id": "fd-rear-race", "look": { "tail": { "bumper": [
-        {"is": "black", "box": [0, 0.84, 0.18, 0.42], "round": 0.04},
-        {"is": "mesh", "box": [0, 0.46, 0.2, 0.4], "round": 0.03},
-        {"is": "grille", "box": [0.5, 0.8, 0.2, 0.4], "round": 0.02}
-      ] } } }
+      { "id": "fd-rear-diffuser", "look": {
+        "tail": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.74, 0.19, 0.37], "round": 0.03},
+            {"is": "grille", "box": [0, 0.58, 0.205, 0.345], "round": 0.02}
+          ]
+        }
+      } },
+      { "id": "fd-rear-race", "look": {
+        "tail": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.84, 0.18, 0.42], "round": 0.04},
+            {"is": "mesh", "box": [0, 0.46, 0.2, 0.4], "round": 0.03},
+            {"is": "grille", "box": [0.5, 0.8, 0.2, 0.4], "round": 0.02}
+          ]
+        }
+      } }
     ] },
+    {"use": "apron"},
+    {"use": "diffuser"},
     {"use": "skirts", "without": ["skirts-blade"]},
     {"use": "widebody"},
     {"use": "canards"},
     { "id": "headlights", "title": "HEADLIGHTS", "options": [
-      { "id": "fd-head-fixed", "look": { "headlights": {"x": 0.62, "y": 0.578, "w": 0.24, "h": 0.05}, "nose": { "lamps": [
-        {"is": "smoked", "box": [0.4, 0.82, 0.548, 0.61], "round": 0.025},
-        {"is": "head", "circle": [0.5, 0.58, 0.024]},
-        {"is": "head", "circle": [0.6, 0.58, 0.024]},
-        {"is": "signal", "box": [0.67, 0.78, 0.565, 0.595], "round": 0.012}
-      ] } } },
-      { "id": "fd-head-slim", "look": { "headlights": {"x": 0.6, "y": 0.578, "w": 0.3, "h": 0.03}, "nose": { "lamps": [
-        {"is": "smoked", "box": [0.38, 0.84, 0.552, 0.606], "round": 0.02},
-        {"is": "head", "box": [0.42, 0.7, 0.57, 0.59], "round": 0.008},
-        {"is": "signal", "box": [0.72, 0.8, 0.57, 0.59], "round": 0.008}
-      ] } } }
+      { "id": "fd-head-fixed", "look": {
+        "headlights": {"x": 0.62, "y": 0.578, "w": 0.24, "h": 0.05},
+        "nose": {
+          "lamps": [
+            {"is": "smoked", "box": [0.4, 0.82, 0.548, 0.61], "round": 0.025},
+            {"is": "head", "circle": [0.5, 0.58, 0.024]},
+            {"is": "head", "circle": [0.6, 0.58, 0.024]},
+            {"is": "signal", "box": [0.67, 0.78, 0.565, 0.595], "round": 0.012}
+          ]
+        }
+      } },
+      { "id": "fd-head-slim", "look": {
+        "headlights": {"x": 0.6, "y": 0.578, "w": 0.3, "h": 0.03},
+        "nose": {
+          "lamps": [
+            {"is": "smoked", "box": [0.38, 0.84, 0.552, 0.606], "round": 0.02},
+            {"is": "head", "box": [0.42, 0.7, 0.57, 0.59], "round": 0.008},
+            {"is": "signal", "box": [0.72, 0.8, 0.57, 0.59], "round": 0.008}
+          ]
+        }
+      } }
     ] },
     { "id": "taillights", "title": "TAIL LIGHTS", "options": [
-      { "id": "fd-tail-bar", "look": { "tail": { "lamps": [
-        {"is": "smoked", "box": [0, 0.78, 0.67, 0.8], "round": 0.05},
-        {"is": "brake", "box": [0, 0.72, 0.725, 0.748], "round": 0.008},
-        {"is": "signal", "box": [0.56, 0.72, 0.69, 0.71], "round": 0.006},
-        {"is": "reverse", "box": [0.22, 0.34, 0.69, 0.71], "round": 0.006}
-      ] } } },
-      { "id": "fd-tail-quad", "look": { "tail": { "lamps": [
-        {"is": "black", "box": [0, 0.78, 0.67, 0.8], "round": 0.05},
-        {"is": "brake", "circle": [0.66, 0.735, 0.056]},
-        {"is": "brake", "circle": [0.53, 0.735, 0.056]},
-        {"is": "signal", "circle": [0.4, 0.735, 0.046]},
-        {"is": "reverse", "circle": [0.285, 0.735, 0.04]}
-      ] } } }
+      { "id": "fd-tail-bar", "look": {
+        "tail": {
+          "lamps": [
+            {"is": "smoked", "box": [0, 0.78, 0.67, 0.8], "round": 0.05},
+            {"is": "brake", "box": [0, 0.72, 0.725, 0.748], "round": 0.008},
+            {"is": "signal", "box": [0.56, 0.72, 0.69, 0.71], "round": 0.006},
+            {"is": "reverse", "box": [0.22, 0.34, 0.69, 0.71], "round": 0.006}
+          ]
+        }
+      } },
+      { "id": "fd-tail-quad", "look": {
+        "tail": {
+          "lamps": [
+            {"is": "black", "box": [0, 0.78, 0.67, 0.8], "round": 0.05},
+            {"is": "brake", "circle": [0.66, 0.735, 0.056]},
+            {"is": "brake", "circle": [0.53, 0.735, 0.056]},
+            {"is": "signal", "circle": [0.4, 0.735, 0.046]},
+            {"is": "reverse", "circle": [0.285, 0.735, 0.04]}
+          ]
+        }
+      } }
     ] },
     {"use": "hood"},
     {"use": "roofScoop"},

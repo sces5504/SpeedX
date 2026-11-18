@@ -62,6 +62,17 @@ export function buildPieces(surface, lists, extra = {}) {
   const finish = (name) => FINISHES[name] || extra[name];
   for (const on of ['nose', 'tail', 'side']) {
     for (const part of lists[on] || []) {
+      // Shaped body panels (side list only): a scoop on the centre line, a blade on each side.
+      if (on === 'side' && part.piece === 'scoop') {
+        const [hood, mouth] = scoopShape(surface, part.rows);
+        pile('scoop:' + (part.is || 'paint'), solid(finish(part.is || 'paint')), hood);      // (own piles: these sheets carry no uv, unlike the flat fills)
+        pile('scoopMouth', solid(FINISHES.black), mouth);
+        continue;
+      }
+      if (on === 'side' && part.piece === 'blade') {
+        for (const side of [1, -1]) pile('blade:' + (part.is || 'paint'), solid(finish(part.is || 'paint')), bladeShape(surface, part.rows, side));
+        continue;
+      }
       const rows = on === 'side' ? part.rows : rowsOf(part);
       const smooth = smoothRows(rows, on === 'side' ? 0.004 : 0.01);      // (the filling follows the same smooth curve as the rim)
       const tail = on === 'tail', joined = on !== 'side' && rows[0][0] <= 0;
@@ -166,6 +177,97 @@ const indexed = (geometry) => {
   for (const name of Object.keys(geometry.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name);
   return geometry;
 };
+
+// ---- Shaped body panels -----------------------------------------------------------------
+// Both are listed under "side" in car.json (so a body kit can swap them by "slot" like any part).
+//
+//   { "piece": "blade", "is": "paint", "rows": [[t, low, high, out], ...] }
+//       A panel with real thickness along the side, standing `out` metres proud of the skin between
+//       the heights `low` and `high` (0 = sill ... 1 = shoulder): a side skirt that can sweep up the
+//       side. Its top edge rolls back into the skin in one smooth curve, so the body above it reads as
+//       set back - a scalloped door running into an intake. Give the end rows a small `out` so the
+//       blade dies away instead of ending in a cut face.
+//   { "piece": "scoop", "is": "paint", "rows": [[t, halfWidth, height], ...] }
+//       A raised air scoop on the centre line (roof or engine cover) that grows out of the panel:
+//       every row is an arch `halfWidth` metres either side of the centre and `height` metres tall,
+//       whose feet run into the skin. The first row is the open mouth (dark inside); let the last
+//       rows shrink so the scoop melts back into the panel.
+// (Flat parts are painted over everything under them, pieces included: keep flat "side" parts
+//  out of the area a blade covers, or give the blade its own black lower blade instead.)
+
+// Grid of positions (rows x columns) -> indexed geometry with smooth normals, facing outward
+// (`outward(normal, point)` > 0 for the outside).
+function sheet(points, columns, outward) {
+  const geometry = new THREE.BufferGeometry(), index = [], rowsCount = points.length / columns;
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(points.flatMap((p) => [p.x, p.y, p.z]), 3));
+  for (let i = 0; i < rowsCount - 1; i++) for (let k = 0; k < columns - 1; k++) {
+    const a = i * columns + k, b = a + 1, c = a + columns, d = c + 1;
+    index.push(a, c, b, b, c, d);
+  }
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  const middle = Math.floor(points.length / 2), n = new THREE.Vector3().fromBufferAttribute(geometry.attributes.normal, middle);
+  if (outward(n, points[middle]) < 0) {                       // wound the wrong way round: turn every triangle over
+    for (let j = 0; j < index.length; j += 3) [index[j + 1], index[j + 2]] = [index[j + 2], index[j + 1]];
+    geometry.setIndex(index);
+    geometry.computeVertexNormals();
+  }
+  return geometry;
+}
+// t positions every `step` between the first and last row, plus every row itself.
+function marksAlong(rows, step) {
+  const marks = new Set(rows.map((r) => r[0]));
+  for (let t = rows[0][0]; t < rows[rows.length - 1][0]; t += step) marks.add(+t.toFixed(5));
+  return [...marks].sort((p, q) => p - q);
+}
+
+function bladeShape(surface, rows, side) {
+  const place = placer(surface, 'side', side);
+  // Across the blade, from its foot to its top: [share of the way from low to high, share of `out`].
+  // (straight up the face, then a quarter-round roll back into the skin over the top 15 %)
+  const across = [[0, 0], [0.001, 1], [0.3, 1], [0.6, 1], [0.85, 1]];
+  for (let k = 1; k <= 6; k++) { const a = (k / 6) * Math.PI / 2; across.push([0.85 + 0.15 * Math.sin(a), Math.cos(a)]); }
+  const points = [];
+  for (const t of marksAlong(rows, 0.004)) {
+    const low = smoothProfile(rows, (r) => r[1], t), high = smoothProfile(rows, (r) => r[2], t), out = smoothProfile(rows, (r) => r[3], t);
+    for (const [f, o] of across) points.push(place(t, lerp(low, high, f), out * o + 0.001));
+  }
+  return sheet(points, across.length, (n) => n.x * side);
+}
+
+function scoopShape(surface, rows) {
+  // The point on the skin `x` metres off the centre line at t: walk round the ring from the middle.
+  const skinAt = (t, x) => {
+    let previous = surface.at(t, U.centre);
+    for (let u = U.centre - 0.05; u >= U.glassLow; u -= 0.05) {
+      const p = surface.at(t, u);
+      if (p.x >= x) return previous.clone().lerp(p, clamp((x - previous.x) / (p.x - previous.x || 1), 0, 1));
+      previous = p;
+    }
+    return previous;
+  };
+  const ROUND = 16, points = [], first = [];
+  marksAlong(rows, 0.005).forEach((t, i) => {
+    const w = smoothProfile(rows, (r) => r[1], t), h = smoothProfile(rows, (r) => r[2], t);
+    for (let k = 0; k <= ROUND; k++) {
+      const a = (k / ROUND) * Math.PI, x = -w * Math.cos(a), p = skinAt(t, Math.abs(x));
+      p.x = Math.sign(x) * Math.abs(p.x);
+      p.y += h * Math.pow(Math.sin(a), 0.7);                   // (the arch's feet meet the skin at a low angle)
+      points.push(p);
+      if (i === 0) first.push(p.clone());
+    }
+  });
+  const hood = sheet(points, ROUND + 1, (n) => n.y);
+  // The mouth: a dark disc just inside the first arch, closed along the skin.
+  const back = first.map((p) => p.clone().add(new THREE.Vector3(0, 0, 0.02)));
+  const centre = back.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(back.length);
+  const mouth = new THREE.BufferGeometry(), position = [centre, ...back].flatMap((p) => [p.x, p.y, p.z]), index = [];
+  for (let k = 1; k < back.length; k++) index.push(0, k, k + 1);
+  mouth.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+  mouth.setIndex(index);
+  mouth.computeVertexNormals();
+  return [hood, mouth];
+}
 
 // One round lamp, facing out of the skin. A headlight: a chrome reflector bowl opening outward
 // with a domed glass lens in it (a projector). Other lamps: a short chrome cup and a flat lens.

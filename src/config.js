@@ -172,6 +172,16 @@ export const PHYSICS = {
   },
 };
 
+// Number plates: ONE standard size on every car in the game (vehicles/carBuilder.js). A car.json only
+// says how high its plates sit ("plates": [front, rear]); it never changes their size.
+export const CAR_PLATE = {
+  width: 0.31,           // metres (a real US plate is 0.305 x 0.152, a Japanese one 0.33 x 0.165)
+  height: 0.155,
+  maxTilt: 0.17,         // radians (~10 degrees): the most a plate leans with a sloping nose or tail. Steeper
+                         // plates looked shorter than the others; past this it stands upright on its bracket instead
+  text: 'SpeedX',        // the line printed across the top of every plate
+};
+
 export const KEYS = {
   throttle: ['KeyW', 'ArrowUp'],
   brake: ['KeyS', 'ArrowDown'],

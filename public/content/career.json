@@ -47,17 +47,14 @@
     "ae86": {
       "price": 14000
     },
-    "evo2": {
-      "price": 34000
-    },
-    "s13": {
-      "price": 38000
-    },
     "fd": {
       "price": 52000
     },
     "veyron": {},
-    "ccgt1": {}
+    "ccgt1": {},
+    "prelude": {},
+    "sx240": {},
+    "supra": {}
   },
   "parts": {
     "internals": [

@@ -76,8 +76,12 @@ for (const id of carIndex?.cars || []) {
       if (!numbers.length || !numbers.every(isNumber) || (part.box && part.box.length !== 4) || (part.circle && part.circle.length !== 3)) bad(id, `"${end}": a "${part.is}" part needs "box": [from, to, bottom, top], "circle": [s, y, radius] or "rows": [[s, bottom, top], ...]`);
     }
   }
+  // (shaped panels, src/vehicles/carPieces.js: a "blade" row is [t, low, high, out], a "scoop" row [t, halfWidth, height];
+  //  both may also be painted the body colour, "is": "paint")
+  const SHAPED = { blade: 4, scoop: 3 };
   for (const part of car.side || []) {
-    if (!PART_KINDS.includes(part.is) || !Array.isArray(part.rows) || part.rows.length < 2 || !part.rows.every((row) => row.length === 3 && row.every(isNumber))) bad(id, '"side": each part needs "is" (a finish) and "rows": [[t, low, high], ...] with 2 or more rows');
+    const size = SHAPED[part.piece] ?? 3, finishes = SHAPED[part.piece] ? [...PART_KINDS, 'paint'] : PART_KINDS;
+    if (!finishes.includes(part.is) || !Array.isArray(part.rows) || part.rows.length < 2 || !part.rows.every((row) => row.length === size && row.every(isNumber))) bad(id, `"side": each part needs "is" (a finish) and "rows" with 2 or more rows of ${part.piece === 'blade' ? '[t, low, high, out]' : part.piece === 'scoop' ? '[t, halfWidth, height]' : '[t, low, high]'}`);
   }
   if (car.model && !fs.existsSync(`${dir}/${car.model.file}`)) bad(id, `model file "${car.model.file}" not found`);
   // Body parts (kit.json): every option needs a name, and may only touch what src/vehicles/carLook.js allows.

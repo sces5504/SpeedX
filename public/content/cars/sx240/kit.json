@@ -1,0 +1,166 @@
+{
+  "about": ["The body parts this car can be restyled with. Format: src/vehicles/carLook.js. { \"use\": ... } = a group of shared parts from content/kits.json. Names: names.json.",
+            "BODY KIT = one full set, after a real one (see reference.md): fitting it takes over the groups it lists in \"blocks\"."],
+  "groups": [
+    { "id": "bodyKit", "title": "BODY KIT", "options": [
+      { "id": "sx240-kit-pandem", "blocks": ["frontBumper", "skirts", "widebody", "spoiler"], "look": {
+        "flares": [0.05, 0.07],
+        "wheelOut": 0.045,
+        "lip": 0.09,
+        "skirts": {"drop": 0.03, "out": 0.03},
+        "spoiler": {"lip": true, "back": 0.06, "span": 0.9},
+        "nose": {
+          "bumper": [
+            {"is": "black", "rows": [[0, 0.44, 0.452], [0.7, 0.44, 0.452], [0.95, 0.44, 0.452]]},
+            {"is": "black", "rows": [[0, 0.235, 0.37], [0.44, 0.235, 0.365], [0.56, 0.245, 0.345], [0.6, 0.26, 0.32]]},
+            {"is": "mesh", "rows": [[0, 0.245, 0.36], [0.42, 0.245, 0.355], [0.52, 0.255, 0.338], [0.56, 0.268, 0.315]]},
+            {"is": "head", "box": [0.64, 0.8, 0.36, 0.4], "round": 0.012},
+            {"is": "signal", "box": [0.86, 0.98, 0.468, 0.496], "round": 0.008}
+          ]
+        }
+      } }
+    ] },
+    { "id": "frontBumper", "title": "FRONT BUMPER", "options": [
+      { "id": "s13-front-aero", "look": {
+        "lip": 0.05,
+        "nose": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.66, 0.2, 0.44], "round": 0.06},
+            {"is": "mesh", "box": [0, 0.6, 0.22, 0.42], "round": 0.05},
+            {"is": "black", "box": [0.72, 0.86, 0.24, 0.38], "round": 0.03},
+            {"is": "signal", "box": [0.7, 0.85, 0.41, 0.44], "round": 0.01}
+          ]
+        }
+      } },
+      { "id": "s13-front-vented", "look": {
+        "lip": 0.08,
+        "nose": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.3, 0.22, 0.42], "round": 0.04},
+            {"is": "grille", "box": [0, 0.26, 0.24, 0.4], "round": 0.03},
+            {"is": "black", "box": [0.36, 0.62, 0.22, 0.42], "round": 0.04},
+            {"is": "mesh", "box": [0.38, 0.6, 0.24, 0.4], "round": 0.03},
+            {"is": "black", "box": [0.68, 0.86, 0.3, 0.42], "round": 0.03},
+            {"is": "signal", "box": [0.69, 0.85, 0.33, 0.39], "round": 0.012}
+          ]
+        }
+      } },
+      { "id": "s13-front-gt", "look": {
+        "lip": 0.11,
+        "nose": {
+          "bumper": [
+            {"is": "black", "rows": [[0, 0.19, 0.46], [0.5, 0.19, 0.46], [0.66, 0.24, 0.43], [0.72, 0.3, 0.4]]},
+            {"is": "mesh", "rows": [[0, 0.21, 0.44], [0.48, 0.21, 0.44], [0.62, 0.25, 0.42], [0.68, 0.31, 0.39]]},
+            {"is": "black", "box": [0.76, 0.9, 0.2, 0.3], "round": 0.02},
+            {"is": "black", "rows": [[0.74, 0.34, 0.356], [0.95, 0.39, 0.406]]},
+            {"is": "black", "rows": [[0.74, 0.44, 0.456], [0.95, 0.49, 0.506]]}
+          ]
+        }
+      } }
+    ] },
+    { "id": "rearBumper", "title": "REAR BUMPER", "options": [
+      { "id": "s13-rear-diffuser", "look": {
+        "tail": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.78, 0.18, 0.35], "round": 0.03},
+            {"is": "grille", "box": [0, 0.62, 0.195, 0.32], "round": 0.02}
+          ]
+        }
+      } },
+      { "id": "s13-rear-smooth", "look": {
+        "tail": {
+          "bumper": [
+            {"is": "black", "box": [0.3, 0.7, 0.2, 0.29], "round": 0.03}
+          ]
+        }
+      } },
+      { "id": "s13-rear-race", "look": {
+        "tail": {
+          "bumper": [
+            {"is": "black", "box": [0, 0.86, 0.17, 0.4], "round": 0.04},
+            {"is": "mesh", "box": [0, 0.5, 0.19, 0.38], "round": 0.03},
+            {"is": "grille", "box": [0.54, 0.82, 0.19, 0.38], "round": 0.02}
+          ]
+        }
+      } }
+    ] },
+    {"use": "apron"},
+    {"use": "diffuser"},
+    {"use": "skirts"},
+    {"use": "widebody"},
+    {"use": "canards"},
+    { "id": "headlights", "title": "HEADLIGHTS", "options": [
+      { "id": "sx240-head-silvia", "look": {
+        "headlights": {"x": 0.55, "y": 0.538, "w": 0.34, "h": 0.05},
+        "nose": {
+          "lamps": [
+            {"is": "smoked", "box": [0, 0.3, 0.508, 0.568], "round": 0.008},
+            {"is": "head", "box": [0.31, 0.66, 0.506, 0.57], "round": 0.012},
+            {"is": "signal", "box": [0.67, 0.84, 0.506, 0.57], "round": 0.012}
+          ]
+        }
+      } },
+      { "id": "sx240-head-projector", "look": {
+        "headlights": {"x": 0.55, "y": 0.538, "w": 0.3, "h": 0.04},
+        "nose": {
+          "lamps": [
+            {"is": "black", "box": [0.26, 0.84, 0.508, 0.568], "round": 0.012},
+            {"is": "head", "circle": [0.38, 0.538, 0.024]},
+            {"is": "head", "circle": [0.5, 0.538, 0.024]},
+            {"is": "head", "circle": [0.62, 0.538, 0.024]},
+            {"is": "signal", "box": [0.7, 0.82, 0.53, 0.546], "round": 0.006}
+          ]
+        }
+      } },
+      { "id": "sx240-head-bar", "look": {
+        "headlights": {"x": 0.55, "y": 0.54, "w": 0.34, "h": 0.02},
+        "nose": {
+          "lamps": [
+            {"is": "black", "box": [0, 0.86, 0.512, 0.564], "round": 0.01},
+            {"is": "head", "box": [0.22, 0.8, 0.533, 0.547], "round": 0.006},
+            {"is": "red", "box": [0, 0.2, 0.536, 0.544], "round": 0.004}
+          ]
+        }
+      } }
+    ] },
+    { "id": "taillights", "title": "TAIL LIGHTS", "options": [
+      { "id": "s13-tail-round", "look": {
+        "tail": {
+          "lamps": [
+            {"is": "smoked", "box": [0.28, 0.84, 0.715, 0.81], "round": 0.012},
+            {"is": "brake", "circle": [0.74, 0.762, 0.036]},
+            {"is": "brake", "circle": [0.635, 0.762, 0.036]},
+            {"is": "signal", "circle": [0.53, 0.762, 0.03]},
+            {"is": "reverse", "circle": [0.435, 0.762, 0.026]}
+          ]
+        }
+      } },
+      { "id": "s13-tail-bar", "look": {
+        "tail": {
+          "lamps": [
+            {"is": "smoked", "box": [0, 0.84, 0.72, 0.805], "round": 0.012},
+            {"is": "brake", "box": [0, 0.82, 0.752, 0.774], "round": 0.008},
+            {"is": "signal", "box": [0.66, 0.82, 0.67, 0.702], "round": 0.008},
+            {"is": "reverse", "box": [0.3, 0.46, 0.67, 0.702], "round": 0.008}
+          ]
+        }
+      } },
+      { "id": "s13-tail-clear", "look": {
+        "tail": {
+          "lamps": [
+            {"is": "chrome", "box": [0.28, 0.84, 0.715, 0.81], "round": 0.012},
+            {"is": "brake", "box": [0.56, 0.82, 0.73, 0.795], "round": 0.01},
+            {"is": "reverse", "box": [0.3, 0.54, 0.73, 0.795], "round": 0.01},
+            {"is": "signal", "box": [0.57, 0.82, 0.67, 0.708], "round": 0.01}
+          ]
+        }
+      } }
+    ] },
+    {"use": "hood"},
+    {"use": "roofScoop"},
+    {"use": "exhaust", "without": ["exhaust-single"]},
+    {"use": "spoiler", "without": ["wing-gt"]},
+    {"use": "rims"},
+    {"use": "livery"}
+  ]
+}

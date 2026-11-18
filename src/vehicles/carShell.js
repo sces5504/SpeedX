@@ -323,6 +323,13 @@ function makeRings(spec, dims) {
       ring.crown = spec.wingCrown ? smoothProfile(spec.wingCrown, (r) => r[1], t) : 0;
       ring.ridge = spec.wingCrown ? smoothProfile(spec.wingCrown, (r) => r[2] ?? 0, t) : 0;
     }
+    // "scallop": [[t, depth, top], ...] - a recess cut into the lower side (a supercar's side scoop):
+    // between its first and last row the side's widest point is pulled `depth` metres in and moved to
+    // the height `top`, so the door's lower part curves inward under a ledge. Rows shallow -> deep make it
+    // deepen toward the intake it leads into. (Only for cars that list it.)
+    if (spec.scallop && t > spec.scallop[0][0] && t < spec.scallop[spec.scallop.length - 1][0]) {
+      ring.scallop = { depth: smoothProfile(spec.scallop, (r) => r[1], t), top: smoothProfile(spec.scallop, (r) => r[2], t) };
+    }
     return ring;
   });
   return rings;
@@ -444,6 +451,11 @@ function ringPoints(ring, spec) {
   const lower = [[0, bottom + 0.04], [0.5 * w, bottom + 0.03], [0.86 * w, bottom + 0.01], [(1 - tuck) * w, bottom + 0.05],
     [(1 - tuck * 0.3) * w, bottom + 0.16], [w, clamp(spec.waist ?? lerp(bottom, belt, 0.55), bottom + 0.2, belt - 0.12)]];   // ("waist": height of the widest point; two-tone cars change colour there)
   if (flare) { lower[3][0] += flare * 0.7; lower[4][0] += flare; lower[5][0] += flare * 0.9; upper[0][0] += flare * 0.45; upper[1][0] += flare * 0.15; }
+  if (ring.scallop) {                                            // the side scoop (see makeRings): widest point pulled in and up
+    const { depth, top } = ring.scallop;
+    lower[5] = [lower[5][0] - depth, clamp(top, bottom + 0.2, belt - 0.12)];
+    lower[4][0] -= depth * 0.25;                                 // (the sill under it follows a little, so the recess has a floor)
+  }
   if (arch > 0) {
     // Wheel arch: the sill is lifted over the wheel, and the side above it is squeezed into the
     // room that is left under the shoulder (evenly, so the wing keeps one smooth shape).

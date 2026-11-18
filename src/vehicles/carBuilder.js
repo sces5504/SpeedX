@@ -22,6 +22,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { lerp } from '../core/mathUtils.js';
+import { CAR_PLATE } from '../config.js';
 import { beamMaterial, canvasTexture, enhanceMaterial, makeGlowTexture } from '../render/materials.js';
 import { getCarModel } from './carModel.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -198,14 +199,16 @@ export function buildCar(spec, colorHex) {
   // "plates": [front, rear] in car.json = their heights; otherwise under the nose and under the tail lamps.
   const plate = makePlate();
   const [plateFrontY, plateRearY] = spec.plates ?? [spec.stations[0][1] - 0.12, T.y - T.h - 0.1];
-  const plateGeo = new THREE.PlaneGeometry(0.31, 0.155);
+  // Every plate in the game is the same standard size (CAR_PLATE in config.js).
+  const plateGeo = new THREE.PlaneGeometry(CAR_PLATE.width, CAR_PLATE.height);
+  const half = CAR_PLATE.height / 2, maxLean = CAR_PLATE.height * Math.tan(CAR_PLATE.maxTilt);
   // ("plateSide": metres the front plate sits off the centre line, for a car whose grille takes the middle)
   for (const [tail, y, x] of [[false, plateFrontY, spec.plateSide ?? 0], [true, plateRearY, 0]]) {
-    // A plate lies against the bodywork: tilted the way the nose or tail leans at that height.
-    // (never flatter than about 35 degrees, or a plate on a low nose would sink into the bonnet)
-    const upper = where(tail, x, y + 0.07), lower = where(tail, x, y - 0.07), out = tail ? 1 : -1;
-    const lean = Math.min(0.1, Math.max(-0.1, upper.z - lower.z));
-    const facing = new THREE.Vector3(0, lean * -out, 0.14 * out).normalize();
+    // A plate lies against the bodywork: tilted the way the nose or tail leans at that height, but
+    // only a little (CAR_PLATE.maxTilt) - a steeper plate would look smaller than everyone else's.
+    const upper = where(tail, x, y + half), lower = where(tail, x, y - half), out = tail ? 1 : -1;
+    const lean = Math.min(maxLean, Math.max(-maxLean, upper.z - lower.z));
+    const facing = new THREE.Vector3(0, lean * -out, CAR_PLATE.height * out).normalize();
     if (x) {
       // Off the centre line the nose also turns away sideways: face the way the skin does there.
       const across = where(tail, x + 0.12, y).sub(where(tail, x - 0.12, y)), down = lower.clone().sub(upper);
@@ -214,13 +217,11 @@ export function buildCar(spec, colorHex) {
     }
     const mesh = add(new THREE.Mesh(plateGeo, plate.material), x, y, tail ? Math.max(upper.z, lower.z) - Math.abs(lean) / 2 : Math.min(upper.z, lower.z) + Math.abs(lean) / 2);
     mesh.position.addScaledVector(facing, 0.015);
-    if (x) {
-      // A flat plate on a curved corner of the nose: stand it off far enough that no part of the
-      // skin behind it comes through (as a real plate on its bracket does).
-      let clear = 0;
-      for (let i = 0; i <= 6; i++) for (let k = 0; k <= 4; k++) clear = Math.max(clear, where(tail, x + (i / 6 - 0.5) * 0.32, y + (k / 4 - 0.5) * 0.16).sub(mesh.position).dot(facing));
-      mesh.position.addScaledVector(facing, clear + 0.006);
-    }
+    // A flat plate on a curved or sloping panel: stand it off far enough that no part of the skin
+    // behind it comes through (as a real plate on its bracket does).
+    let clear = 0;
+    for (let i = 0; i <= 6; i++) for (let k = 0; k <= 4; k++) clear = Math.max(clear, where(tail, x + (i / 6 - 0.5) * (CAR_PLATE.width + 0.01), y + (k / 4 - 0.5) * (CAR_PLATE.height + 0.005)).sub(mesh.position).dot(facing));
+    if (clear > -0.006) mesh.position.addScaledVector(facing, clear + 0.006);
     mesh.lookAt(mesh.position.clone().add(facing));
   }
 
@@ -431,7 +432,7 @@ export function buildCar(spec, colorHex) {
 }
 
 // ---------------------------------------------------------------------------
-// Licence plate: a little canvas with a random California-style number.
+// Licence plate: a little canvas with a random number under the game's name (CAR_PLATE.text).
 // plate.setText() gives it a new number (used when an AI car is recycled).
 // ---------------------------------------------------------------------------
 const LETTERS = 'ABCDEFGHJKLMNPRSTUVWXYZ';
@@ -493,7 +494,7 @@ function makePlate() {
       g.fillStyle = '#f1f1ea'; g.fillRect(0, 0, 256, 128);
       g.strokeStyle = '#8a8a86'; g.lineWidth = 4; g.strokeRect(3, 3, 250, 122);
       g.textAlign = 'center';
-      g.fillStyle = '#c0282c'; g.font = 'italic bold 24px Georgia, serif'; g.fillText('California', 128, 30);
+      g.fillStyle = '#c0282c'; g.font = 'italic bold 24px Georgia, serif'; g.fillText(CAR_PLATE.text, 128, 30);
       g.fillStyle = '#1b2a6b'; g.font = 'bold 68px "Arial Narrow", Arial, sans-serif'; g.fillText(text, 128, 100);
       texture.needsUpdate = true;
     },

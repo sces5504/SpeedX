@@ -16,6 +16,12 @@
       "torque": [[1000, 150], [2500, 225], [3600, 274], [5000, 268], [6400, 228], [7500, 170]],
       "sound": "turbo4", "mass": 165, "fits": ["turbo"]
     },
+    "ka24de": {
+      "layout": "I4", "cylinders": 4, "litres": 2.4, "aspiration": "na",
+      "idle": 750, "redline": 6600,
+      "torque": [[1000, 165], [2500, 195], [4400, 217], [5600, 197], [6600, 168]],
+      "sound": "big4", "mass": 165, "fits": ["turbo", "supercharger"]
+    },
     "4age": {
       "layout": "I4", "cylinders": 4, "litres": 1.6, "aspiration": "na",
       "idle": 950, "redline": 7700,
@@ -27,6 +33,18 @@
       "idle": 850, "redline": 8600,
       "torque": [[1000, 140], [3000, 170], [5500, 180], [7000, 206], [8000, 193], [8600, 172]],
       "sound": "vtec4", "mass": 140, "fits": ["turbo", "supercharger"]
+    },
+    "h23a1": {
+      "layout": "I4", "cylinders": 4, "litres": 2.3, "aspiration": "na",
+      "idle": 750, "redline": 6500,
+      "torque": [[1000, 150], [2500, 185], [4000, 205], [5300, 212], [5800, 196], [6500, 178]],
+      "sound": "big4", "mass": 150, "fits": ["turbo", "supercharger"]
+    },
+    "h22a": {
+      "layout": "I4", "cylinders": 4, "litres": 2.2, "aspiration": "na",
+      "idle": 800, "redline": 7400,
+      "torque": [[1000, 140], [3000, 178], [5000, 205], [5500, 219], [6800, 206], [7400, 186]],
+      "sound": "vtec4", "mass": 150, "fits": ["turbo", "supercharger"]
     },
     "m102-evo": {
       "layout": "I4", "cylinders": 4, "litres": 2.5, "aspiration": "na",
